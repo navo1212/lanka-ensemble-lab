@@ -166,7 +166,7 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 What this shows
 
 Random Forest reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
-XGBoost starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — boosting reduces bias, and needs a tuned number of trees.
+XGBoost starts far off (learning rate 0.03 = small steps), improves tree by tree — boosting reduces bias — and is best at 200 trees (0.596 °C). With more trees it slowly gets worse (0.613 °C at 600): boosting over-fits if it runs too long, so it needs early stopping or a tuned number of trees.
 
 RF mean CV RMSE
 
@@ -176,7 +176,9 @@ XGB mean CV RMSE
 
 0.517 °C
 
-Each fold trains on all earlier years and tests on the following year — no future data leaks into training. The notebook adds a corrected t-test of the difference.
+Each fold trains on all earlier years and tests on the following year — no future data leaks into training. This page uses lighter settings (5 folds, 200 trees) so it loads fast.
+
+Notebook (6 folds, full settings): Random Forest 0.500 vs XGBoost 0.503 °C — corrected t-test p = 0.55 → not significant at 5%.
 
 What drives tomorrow's temperature? (built-in importance)
 doy_cos
@@ -230,7 +232,7 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 What this shows
 
 Random Forest reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
-XGBoost starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — boosting reduces bias, and needs a tuned number of trees.
+XGBoost starts far off (learning rate 0.03 = small steps), improves tree by tree — boosting reduces bias — and is best at 200 trees (0.596 °C). With more trees it slowly gets worse (0.613 °C at 600): boosting over-fits if it runs too long, so it needs early stopping or a tuned number of trees.
 
 RF mean CV RMSE
 
@@ -240,7 +242,9 @@ XGB mean CV RMSE
 
 0.517 °C
 
-Each fold trains on all earlier years and tests on the following year — no future data leaks into training. The notebook adds a corrected t-test of the difference.
+Each fold trains on all earlier years and tests on the following year — no future data leaks into training. This page uses lighter settings (5 folds, 200 trees) so it loads fast.
+
+Notebook (6 folds, full settings): Random Forest 0.500 vs XGBoost 0.503 °C — corrected t-test p = 0.55 → not significant at 5%.
 
 What drives tomorrow's temperature? (built-in importance)
 doy_cos
