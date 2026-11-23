@@ -524,7 +524,7 @@ Forecast for 2026-11-18 (hybrid)
 
 no
 
-Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — the non-linear weather effect that ARIMA alone cannot see.
+Move the sliders: only the Random Forest part of the hybrid sees rain, sunshine and wind, so the change you see is the non-linear weather effect that ARIMA alone cannot model.
 
 ===== 09_tomorrow_chart | problem=False
 Skip to main content
@@ -596,7 +596,81 @@ Forecast for 2026-11-18 (hybrid)
 
 no
 
-Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — the non-linear weather effect that ARIMA alone cannot see.
+Move the sliders: only the Random Forest part of the hybrid sees rain, sunshine and wind, so the change you see is the non-linear weather effect that ARIMA alone cannot model.
+
+===== 08b_tomorrow_whatif | problem=False
+Skip to main content
+🌦️ LankaEnsemble Lab
+
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
+
+Navigate
+
+🏠 Home & Story
+
+⚔️ Ensemble Arena
+
+🌲 RF vs XGBoost
+
+★ Hybrid ARIMA + RF
+
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
+
+ℹ️ Research & About
+
+B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
+
+🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
+
+💡 Tomorrow in Colombo
+
+Data source: REAL · Open-Meteo archive (ERA5) — downloaded live · last observed day: 2026-11-17 (the archive lags ~5 days)
+
+keyboard_arrow_down
+
+🌧️ What-if: change the last day's weather
+
+Rainfall (mm)
+
+62.50
+
+0.00
+
+150.00
+
+Solar radiation (MJ/m²) — low = cloudy
+
+3.50
+
+2.00
+
+30.00
+
+Max wind (km/h)
+
+11.70
+
+3.00
+
+60.00
+
+Forecast for 2026-11-18 (hybrid)
+
+27.3 °C
+
++0.11 °C from your what-if
+
+80% range (from last year's errors)
+
+26.6 – 28.0 °C
+
+🔥 Heat alert (≥ 28.5 °C)
+
+no
+
+Move the sliders: only the Random Forest part of the hybrid sees rain, sunshine and wind, so the change you see is the non-linear weather effect that ARIMA alone cannot model.
 
 ===== 10_about | problem=False
 Skip to main content
