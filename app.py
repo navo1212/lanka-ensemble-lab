@@ -291,10 +291,12 @@ def show_fig(fig):
     plt.close(fig)
 
 
-def fig_bar(series, colors=None, title="", xlabel=""):
+def fig_bar(series, colors=None, title="", xlabel="", xlim=None):
     fig, ax = plt.subplots(figsize=(7, max(2.5, 0.38 * len(series))))
     ax.barh(series.index[::-1], series.values[::-1], color=(colors[::-1] if colors is not None else "#2a9d8f"))
     ax.set_title(title); ax.set_xlabel(xlabel); ax.grid(axis="x", alpha=.3)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
     fig.tight_layout()
     return fig
 
@@ -351,8 +353,11 @@ elif page == PAGES[1]:
     k4.metric("Best boosting AUC", f"{board[board.Family == 'Boosting']['ROC-AUC'].max():.4f}")
     left, right = st.columns([1.15, 1])
     with left:
+        lo, hi = b[metric].min(), b[metric].max()
+        pad = max(0.01, (hi - lo) * 0.25)
         show_fig(fig_bar(b.set_index("Model")[metric], colors=[FAM_COL[f] for f in b.Family],
-                          title=f"{metric} on 1,600 unseen customers", xlabel=metric))
+                          title=f"{metric} on 1,600 unseen customers", xlabel=metric,
+                          xlim=(max(0, lo - pad), min(1, hi + pad / 2))))
         st.caption("🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline")
     with right:
         sel = st.multiselect("ROC curves for", list(b.Model), default=list(b.Model[:4]))
@@ -367,7 +372,11 @@ elif page == PAGES[1]:
     st.subheader("🌲 vs 🚀 Random Forest vs XGBoost — how does accuracy grow with more trees?")
     c1, c2 = st.columns([1.3, 1])
     with c1:
-        st.line_chart(R["curve"], x_label="number of trees", y_label="test ROC-AUC")
+        fig, ax = plt.subplots(figsize=(7.5, 4.2))
+        ax.plot(R["curve"].index, R["curve"]["Random Forest"], "o-", color="#2a9d8f", lw=2.5, label="Random Forest (bagging)")
+        ax.plot(R["curve"].index, R["curve"]["XGBoost"], "s-", color="#e76f51", lw=2.5, label="XGBoost (boosting)")
+        ax.set_xlabel("number of trees"); ax.set_ylabel("test ROC-AUC"); ax.set_title("Accuracy vs ensemble size")
+        ax.grid(alpha=.3); ax.legend(); fig.tight_layout(); show_fig(fig)
     with c2:
         st.markdown("""**What this shows**
 * **RF (bagging)** climbs fast then **plateaus** — more trees only average more; they never over-fit.
@@ -476,7 +485,8 @@ elif page == PAGES[2]:
                   f"{res.iloc[2]['Net ROI (LKR)'] - res.iloc[0]['Net ROI (LKR)']:+,.0f} vs random")
         k2.metric("Churners reached by optimizer", int(res.iloc[2]["True churners reached"]),
                   f"{int(res.iloc[2]['True churners reached'] - res.iloc[0]['True churners reached']):+d} vs random")
-        st.dataframe(res.style.format({"Revenue saved (LKR)": "{:,.0f}", "Net ROI (LKR)": "{:,.0f}"}))
+        st.dataframe(res.style.format({"Customers targeted": "{:,.0f}", "True churners reached": "{:,.0f}",
+                                       "Revenue saved (LKR)": "{:,.0f}", "Net ROI (LKR)": "{:,.0f}"}))
         st.markdown("**Call list (top 25)**")
         st.dataframe(d.sort_values("expected_saving", ascending=False).head(25)[
             ["customer_id", "district", "plan_type", "monthly_spend_lkr", "p_churn", "expected_saving"]]
@@ -552,7 +562,16 @@ elif page == PAGES[4]:
     k4.metric("ARIMA test RMSE", f"{W['board'].loc['ARIMA + Fourier', 'RMSE °C']:.3f} °C")
     days = st.slider("Show last N test days", 30, 365, 120, 15)
     cols = st.multiselect("Series", list(W["preds"].columns), default=["Actual", "ARIMA + Fourier", "Hybrid ARIMA + RF"])
-    st.line_chart(W["preds"][cols].iloc[-days:], y_label="°C (daily mean)")
+    styles = {"Actual": dict(color="black", lw=2.2), "Naive (yesterday)": dict(color="#adb5bd", lw=1.2, ls=":"),
+              "ARIMA + Fourier": dict(color="#4c72b0", lw=1.6, ls="--"),
+              "Random Forest (direct)": dict(color="#2a9d8f", lw=1.4), "Hybrid ARIMA + RF": dict(color="#e76f51", lw=2.0)}
+    fig, ax = plt.subplots(figsize=(13, 4.2))
+    for c in cols:
+        s_ = W["preds"][c].iloc[-days:]
+        ax.plot(s_.index, s_.values, label=c, **styles.get(c, {}))
+    ax.set_ylabel("°C (daily mean)"); ax.grid(alpha=.3)
+    ax.legend(ncol=max(1, len(cols)), loc="upper center", fontsize=9, frameon=False)
+    fig.autofmt_xdate(); fig.tight_layout(); show_fig(fig)
     c1, c2 = st.columns([1, 1])
     with c1:
         st.dataframe(W["board"].style.format("{:.4f}").background_gradient(subset=["RMSE °C"], cmap="Greens_r"))
@@ -567,7 +586,12 @@ elif page == PAGES[4]:
         mon["rain"] = mon["rain"] / W["wx"].index.year.nunique()
         mon.index = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         c1, c2 = st.columns(2)
-        c1.bar_chart(mon["rain"], y_label="avg rain per month (mm)"); c2.line_chart(mon["temp"], y_label="mean temp °C")
+        c1.bar_chart(mon["rain"], y_label="avg rain per month (mm)")
+        fig, ax = plt.subplots(figsize=(6, 3.2))
+        ax.plot(mon.index, mon["temp"], "o-", color="#e76f51"); ax.set_ylabel("mean temp °C"); ax.grid(alpha=.3)
+        fig.tight_layout()
+        with c2:
+            show_fig(fig)
 
 # ---------------------------------------------------------------- ABOUT
 else:
