@@ -1,0 +1,47 @@
+name: Dashboard screenshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "tools/screenshot_dashboard.py"
+      - ".github/workflows/screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dashboard-screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the dashboard and Playwright
+        run: |
+          pip install -q -r requirements.txt playwright
+          python -m playwright install --with-deps chromium
+      - name: Start the dashboard and take screenshots
+        run: |
+          streamlit run app.py --server.headless true --server.port 8501 --client.toolbarMode minimal --browser.gatherUsageStats false > streamlit.log 2>&1 &
+          sleep 20
+          python tools/screenshot_dashboard.py
+      - name: Show the server log
+        if: always()
+        run: tail -n 80 streamlit.log || true
+      - name: Commit the screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Dashboard screenshots [skip ci]" || echo "Nothing to commit"
+          git pull --rebase origin main
+          git push
