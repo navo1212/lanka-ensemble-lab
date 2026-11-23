@@ -361,6 +361,7 @@ print("Correlation of RF and ANN test errors:", np.corrcoef(yv_te - p_rf, yv_te 
 # * **RF weakness:** a forest predicts by *averaging leaf values*, so its predictions are piece-wise constant and it **cannot extrapolate** — smooth effects like exponential depreciation with age and mileage are approximated by steps, and very cheap/very expensive cars get pulled toward the middle.
 # * **ANN strengths/weakness:** the MLP learns smooth, continuous relationships (log-price is almost linear in age), but it needs scaled inputs, is sensitive to initialisation, and is weaker on rare categories with few examples.
 # * **Why the hybrid helps:** their errors are only partly correlated (printed above), so combining them cancels part of each model's error. The **residual hybrid** is the most "engineered" idea: RF captures the big structure, the ANN smooths what RF leaves behind. Using **out-of-fold** RF predictions to train the residual ANN is essential — otherwise RF's training residuals are near zero (it memorises the training set) and the ANN learns nothing useful.
+# * **What happened in this run:** the blend and the stacking hybrid beat both RF and the ANN, while the residual hybrid did not beat RF alone. RF and ANN errors are highly correlated (≈0.8), so little signal is left in RF's residuals for the ANN to learn; simple averaging is the more reliable way to combine two similar models.
 
 # %% [markdown]
 # ### 💡 Innovation 1 — "ikman Deal Checker" with RF uncertainty
@@ -559,9 +560,9 @@ json.dump({"arena": arena.to_dict("records"), "vehicle": veh_res.reset_index().t
 # %% [markdown]
 # ## 9. Conclusions
 # 1. **Bagging** (RF, Extra Trees) gives a large, cheap, low-risk improvement over a single tree by reducing variance.
-# 2. **Boosting** (XGBoost, LightGBM, CatBoost, GBM) is usually the strongest single family on Sri Lankan tabular churn data because the signal is many small additive effects + interactions; AdaBoost is hurt by label noise.
-# 3. **Stacking** gives a small extra gain by combining models with partly independent errors, at higher cost and lower interpretability.
-# 4. **RF vs XGBoost:** decided with repeated CV and a corrected t-test rather than one split.
+# 2. **Boosting** produced the strongest single models on the Sri Lankan churn data (CatBoost was best, AdaBoost and GBM close behind) because the signal is many small additive effects + interactions. AdaBoost did well here even though it is, in general, the booster most sensitive to label noise.
+# 3. **Stacking** matched the best single model, was the strongest family on average and had the best F1 and PR-AUC: combining models with partly independent errors buys robustness more than a higher peak, at higher cost and lower interpretability.
+# 4. **RF vs XGBoost:** decided with repeated CV and a corrected t-test rather than one split — on this data their difference was not statistically significant.
 # 5. **Hybrids work when components have different strengths and uncorrelated errors**: RF + ANN for prices; ARIMA + RF for weather.
 # 6. **Innovation:** turning probabilities into **LKR decisions** (Retention Optimizer) and **price ranges** (Deal Checker) is what makes the models useful to a Sri Lankan business or buyer.
 #
