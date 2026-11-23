@@ -209,13 +209,14 @@ a = arena.sort_values("RMSE °C", ascending=False)
 ax[0].barh(a.Model, a["RMSE °C"], color=[fam_colors[f] for f in a.Family])
 ax[0].set_xlim(a["RMSE °C"].min() * 0.95, a["RMSE °C"].max() * 1.02); ax[0].set_xlabel("test RMSE (°C) — lower is better")
 ax[0].set_title("Tomorrow's temperature: error by model")
-ax[0].legend(handles=[Patch(color=c, label=f) for f, c in fam_colors.items()], loc="lower right")
+ax[0].legend(handles=[Patch(color=c, label=f) for f, c in fam_colors.items()], loc="upper right")
 last = test_idx[-120:]
 ax[1].plot(last, y_te.loc[last], "k-", lw=2, label="Actual")
 best_name = arena.iloc[0].Model
 for nm, st in [("Naive (tomorrow = today)", ":"), (best_name, "-")]:
     ax[1].plot(last, pd.Series(preds[nm], index=test_idx).loc[last], st, lw=1.6, label=nm)
 ax[1].set_title("Last 120 test days"); ax[1].set_ylabel("°C"); ax[1].legend(fontsize=8)
+plt.setp(ax[1].get_xticklabels(), rotation=30, ha="right")
 plt.tight_layout(); plt.show()
 print(arena.groupby("Family")["RMSE °C"].agg(["min", "mean"]).sort_values("min").round(4))
 
@@ -280,6 +281,8 @@ ax[1].set_ylim(min(rf_curve + xgb_curve) * 0.98, min(max(rf_curve + xgb_curve), 
 ax[1].set_xlabel("number of trees"); ax[1].set_ylabel("test RMSE °C"); ax[1].set_title("Error vs ensemble size"); ax[1].legend()
 imp.iloc[::-1].plot.barh(ax=ax[2]); ax[2].set_title("Permutation importance (increase in RMSE)")
 plt.tight_layout(); plt.show()
+print(f"Random Forest: {rf_curve[0]:.3f} °C with {Ns[0]} trees, then {min(rf_curve[2:]):.3f}–{max(rf_curve[2:]):.3f} °C from {Ns[2]} trees on (flat: more trees never hurt)")
+print(f"XGBoost: best {min(xgb_curve):.3f} °C at {Ns[int(np.argmin(xgb_curve))]} trees, {xgb_curve[-1]:.3f} at {Ns[-1]} trees → too many trees over-fit")
 
 # %% [markdown]
 # ### Interpreting RF vs XGBoost
