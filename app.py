@@ -33,6 +33,7 @@ import lightgbm as lgb
 from statsmodels.tsa.arima.model import ARIMA
 
 SEED = 42
+NJ = 2   # Streamlit Community Cloud has ~2 CPUs; n_jobs=-1 would start one process per *host* CPU and thrash
 DATA = Path(__file__).parent / "data"
 FAM_COL = {"Baseline": "#adb5bd", "Bagging": "#2a9d8f", "Boosting": "#e76f51", "Stacking": "#6a4c93"}
 
@@ -109,26 +110,26 @@ NUM_V = ["engine_cc", "year_of_manufacture", "vehicle_age", "mileage_km", "previ
 # MODEL TRAINING (cached — runs once per server)
 # =====================================================================================
 def churn_model_zoo():
-    base = [("rf", RandomForestClassifier(n_estimators=200, min_samples_leaf=3, random_state=SEED, n_jobs=-1)),
+    base = [("rf", RandomForestClassifier(n_estimators=200, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
             ("xgb", xgb.XGBClassifier(n_estimators=300, learning_rate=0.05, max_depth=4, subsample=0.8,
-                                      colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=-1)),
+                                      colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=NJ)),
             ("lgbm", lgb.LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=15, random_state=SEED, verbose=-1)),
             ("lr", LogisticRegression(max_iter=2000))]
     return {
         "Logistic Regression": ("Baseline", LogisticRegression(max_iter=2000)),
         "Decision Tree": ("Baseline", DecisionTreeClassifier(max_depth=6, random_state=SEED)),
-        "Bagging (Trees)": ("Bagging", BaggingClassifier(DecisionTreeClassifier(), n_estimators=100, random_state=SEED, n_jobs=-1)),
-        "Random Forest": ("Bagging", RandomForestClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=-1)),
-        "Extra Trees": ("Bagging", ExtraTreesClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=-1)),
+        "Bagging (Trees)": ("Bagging", BaggingClassifier(DecisionTreeClassifier(), n_estimators=100, random_state=SEED, n_jobs=NJ)),
+        "Random Forest": ("Bagging", RandomForestClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
+        "Extra Trees": ("Bagging", ExtraTreesClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
         "AdaBoost": ("Boosting", AdaBoostClassifier(n_estimators=200, learning_rate=0.5, random_state=SEED)),
         "Gradient Boosting": ("Boosting", GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=3, random_state=SEED)),
         "XGBoost": ("Boosting", xgb.XGBClassifier(n_estimators=400, learning_rate=0.05, max_depth=4, subsample=0.8,
-                                                  colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=-1)),
+                                                  colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=NJ)),
         "LightGBM": ("Boosting", lgb.LGBMClassifier(n_estimators=400, learning_rate=0.05, num_leaves=15, subsample=0.8,
                                                     subsample_freq=1, colsample_bytree=0.8, random_state=SEED, verbose=-1)),
         "Stacking (RF+XGB+LGBM+LR)": ("Stacking", StackingClassifier(base, final_estimator=LogisticRegression(max_iter=2000),
-                                                                     cv=3, stack_method="predict_proba", n_jobs=-1)),
-        "Soft Voting (RF+XGB+LGBM+LR)": ("Stacking", VotingClassifier(base, voting="soft", n_jobs=-1)),
+                                                                     cv=3, stack_method="predict_proba", n_jobs=NJ)),
+        "Soft Voting (RF+XGB+LGBM+LR)": ("Stacking", VotingClassifier(base, voting="soft", n_jobs=NJ)),
     }
 
 
@@ -156,7 +157,7 @@ def train_churn():
     board = pd.DataFrame(rows).sort_values("ROC-AUC", ascending=False).reset_index(drop=True)
     # ensemble-size curves: RF vs XGBoost
     Ns = [5, 10, 25, 50, 100, 200, 300, 400]
-    rf_w = RandomForestClassifier(min_samples_leaf=3, random_state=SEED, n_jobs=-1, warm_start=True)
+    rf_w = RandomForestClassifier(min_samples_leaf=3, random_state=SEED, n_jobs=NJ, warm_start=True)
     rf_curve = []
     for n in Ns:
         rf_w.set_params(n_estimators=n); rf_w.fit(Xtr, ytr)
@@ -175,11 +176,11 @@ def train_vehicle():
     pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CAT_V),
                              ("num", StandardScaler(), NUM_V)])
     Xtr, Xte = pre.fit_transform(Xtr_raw), pre.transform(Xte_raw)
-    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=2, max_features=0.5, random_state=SEED, n_jobs=-1)
+    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=2, max_features=0.5, random_state=SEED, n_jobs=NJ)
     ann = MLPRegressor(hidden_layer_sizes=(128, 64), alpha=1e-3, learning_rate_init=2e-3, max_iter=600,
                        early_stopping=True, n_iter_no_change=25, random_state=SEED)
     kf = KFold(5, shuffle=True, random_state=SEED)
-    oof_rf = cross_val_predict(rf, Xtr, ytr, cv=kf, n_jobs=-1)
+    oof_rf = cross_val_predict(rf, Xtr, ytr, cv=kf, n_jobs=NJ)
     oof_ann = cross_val_predict(ann, Xtr, ytr, cv=kf)
     rf.fit(Xtr, ytr); ann.fit(Xtr, ytr)
     ws = np.linspace(0, 1, 101)
@@ -187,11 +188,11 @@ def train_vehicle():
     res_ann = MLPRegressor(hidden_layer_sizes=(64, 32), alpha=1e-2, max_iter=600, early_stopping=True,
                            n_iter_no_change=25, random_state=SEED).fit(np.column_stack([Xtr, oof_rf]), ytr - oof_rf)
     stack = StackingRegressor([("rf", RandomForestRegressor(n_estimators=200, min_samples_leaf=2, max_features=0.5,
-                                                            random_state=SEED, n_jobs=-1)),
+                                                            random_state=SEED, n_jobs=NJ)),
                                ("ann", MLPRegressor(hidden_layer_sizes=(128, 64), alpha=1e-3, learning_rate_init=2e-3,
                                                     max_iter=600, early_stopping=True, n_iter_no_change=25,
                                                     random_state=SEED))],
-                              final_estimator=RidgeCV(), cv=5, n_jobs=-1).fit(Xtr, ytr)
+                              final_estimator=RidgeCV(), cv=5, n_jobs=NJ).fit(Xtr, ytr)
     p_rf, p_ann = rf.predict(Xte), ann.predict(Xte)
     preds = {"Random Forest": p_rf, "ANN (MLP)": p_ann, f"Hybrid: Blend (w_RF={w:.2f})": w * p_rf + (1 - w) * p_ann,
              "Hybrid: RF + ANN residual": p_rf + res_ann.predict(np.column_stack([Xte, p_rf])),
@@ -248,11 +249,11 @@ def train_weather(test_days=365):
     valid = feats.dropna().index
     tr = valid[valid < yte.index[0]][30:]
     te = yte.index
-    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=-1)
+    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)
     rf.fit(feats.loc[tr], resid.loc[tr])
     hybrid = fc_all.loc[te] + rf.predict(feats.loc[te])
     dcols = [c for c in feats.columns if not c.startswith("resid_")]
-    rfd = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=-1)
+    rfd = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)
     rfd.fit(feats.loc[tr, dcols], y.loc[tr])
     preds = pd.DataFrame({"Actual": yte, "Naive (yesterday)": y.shift(1).loc[te], "ARIMA + Fourier": fc_all.loc[te],
                           "Random Forest (direct)": rfd.predict(feats.loc[te, dcols]), "Hybrid ARIMA + RF": hybrid})
