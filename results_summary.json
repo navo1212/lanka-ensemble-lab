@@ -1,0 +1,213 @@
+{
+  "arena": [
+    {
+      "Model": "CatBoost",
+      "Family": "Boosting",
+      "Accuracy": 0.798125,
+      "Precision": 0.6648648648648648,
+      "Recall": 0.3203125,
+      "F1": 0.43233743409490333,
+      "ROC-AUC": 0.7852419133771928,
+      "PR-AUC": 0.5512397671329068,
+      "Train time (s)": 0.7841243743896484
+    },
+    {
+      "Model": "AdaBoost",
+      "Family": "Boosting",
+      "Accuracy": 0.800625,
+      "Precision": 0.7372262773722628,
+      "Recall": 0.2630208333333333,
+      "F1": 0.3877159309021113,
+      "ROC-AUC": 0.7849720737390351,
+      "PR-AUC": 0.5687627111017197,
+      "Train time (s)": 1.9886350631713867
+    },
+    {
+      "Model": "Stacking (RF+XGB+LGBM+LR \u2192 LR)",
+      "Family": "Stacking",
+      "Accuracy": 0.799375,
+      "Precision": 0.6567164179104478,
+      "Recall": 0.34375,
+      "F1": 0.4512820512820513,
+      "ROC-AUC": 0.7847814727247807,
+      "PR-AUC": 0.5689918235742502,
+      "Train time (s)": 7.180649280548096
+    },
+    {
+      "Model": "Soft Voting (RF+XGB+LGBM+LR)",
+      "Family": "Stacking",
+      "Accuracy": 0.804375,
+      "Precision": 0.7100591715976331,
+      "Recall": 0.3125,
+      "F1": 0.43399638336347196,
+      "ROC-AUC": 0.7841775459155702,
+      "PR-AUC": 0.5674908770396032,
+      "Train time (s)": 1.3440589904785156
+    },
+    {
+      "Model": "Gradient Boosting (sklearn)",
+      "Family": "Boosting",
+      "Accuracy": 0.796875,
+      "Precision": 0.6612021857923497,
+      "Recall": 0.3151041666666667,
+      "F1": 0.42680776014109345,
+      "ROC-AUC": 0.7804361979166666,
+      "PR-AUC": 0.5583677379941475,
+      "Train time (s)": 3.9271156787872314
+    },
+    {
+      "Model": "Random Forest",
+      "Family": "Bagging",
+      "Accuracy": 0.788125,
+      "Precision": 0.7419354838709677,
+      "Recall": 0.1796875,
+      "F1": 0.2893081761006289,
+      "ROC-AUC": 0.7793289987664473,
+      "PR-AUC": 0.5618394580906394,
+      "Train time (s)": 1.1348273754119873
+    },
+    {
+      "Model": "XGBoost",
+      "Family": "Boosting",
+      "Accuracy": 0.796875,
+      "Precision": 0.645320197044335,
+      "Recall": 0.3411458333333333,
+      "F1": 0.4463373083475298,
+      "ROC-AUC": 0.7742834258497806,
+      "PR-AUC": 0.5523420249854529,
+      "Train time (s)": 0.2596323490142822
+    },
+    {
+      "Model": "Logistic Regression (baseline)",
+      "Family": "Baseline",
+      "Accuracy": 0.798125,
+      "Precision": 0.6548223350253807,
+      "Recall": 0.3359375,
+      "F1": 0.4440619621342513,
+      "ROC-AUC": 0.7740564179002193,
+      "PR-AUC": 0.5563993860392265,
+      "Train time (s)": 0.022645235061645508
+    },
+    {
+      "Model": "LightGBM",
+      "Family": "Boosting",
+      "Accuracy": 0.793125,
+      "Precision": 0.6318407960199005,
+      "Recall": 0.3307291666666667,
+      "F1": 0.4341880341880342,
+      "ROC-AUC": 0.7700280975877193,
+      "PR-AUC": 0.5404670671141385,
+      "Train time (s)": 0.24347734451293945
+    },
+    {
+      "Model": "Extra Trees",
+      "Family": "Bagging",
+      "Accuracy": 0.786875,
+      "Precision": 0.7362637362637363,
+      "Recall": 0.17447916666666666,
+      "F1": 0.28210526315789475,
+      "ROC-AUC": 0.754906369928728,
+      "PR-AUC": 0.5319081314218206,
+      "Train time (s)": 1.015655755996704
+    },
+    {
+      "Model": "Bagging (Decision Trees)",
+      "Family": "Bagging",
+      "Accuracy": 0.793125,
+      "Precision": 0.6387434554973822,
+      "Recall": 0.3177083333333333,
+      "F1": 0.42434782608695654,
+      "ROC-AUC": 0.7433268229166667,
+      "PR-AUC": 0.5199892118237882,
+      "Train time (s)": 4.982266902923584
+    },
+    {
+      "Model": "Single Decision Tree",
+      "Family": "Baseline",
+      "Accuracy": 0.78125,
+      "Precision": 0.5841584158415841,
+      "Recall": 0.3072916666666667,
+      "F1": 0.40273037542662116,
+      "ROC-AUC": 0.7076833624588815,
+      "PR-AUC": 0.45824042015663746,
+      "Train time (s)": 0.03373599052429199
+    }
+  ],
+  "vehicle": [
+    {
+      "index": "Hybrid 1: Blend (w_RF=0.59)",
+      "MAE (LKR mn)": 0.6033122163225045,
+      "RMSE (LKR mn)": 0.9193797441888792,
+      "MAPE %": 6.220394802541271,
+      "R\u00b2": 0.9808752958581067
+    },
+    {
+      "index": "Hybrid 3: Stacking RF+ANN \u2192 Ridge",
+      "MAE (LKR mn)": 0.6039574994014054,
+      "RMSE (LKR mn)": 0.9121829557773712,
+      "MAPE %": 6.219150865638087,
+      "R\u00b2": 0.9811735355129313
+    },
+    {
+      "index": "XGBoost (reference)",
+      "MAE (LKR mn)": 0.6101391637285549,
+      "RMSE (LKR mn)": 0.948346607433158,
+      "MAPE %": 6.230108392961344,
+      "R\u00b2": 0.9796511883030513
+    },
+    {
+      "index": "Random Forest",
+      "MAE (LKR mn)": 0.6235487872060833,
+      "RMSE (LKR mn)": 0.9474970079640903,
+      "MAPE %": 6.462594075977818,
+      "R\u00b2": 0.9796876319311253
+    },
+    {
+      "index": "ANN (MLP)",
+      "MAE (LKR mn)": 0.6508764688866839,
+      "RMSE (LKR mn)": 0.9997775945304344,
+      "MAPE %": 6.6373759057157615,
+      "R\u00b2": 0.9773842152150869
+    },
+    {
+      "index": "Hybrid 2: RF + ANN residual",
+      "MAE (LKR mn)": 0.6521739470231704,
+      "RMSE (LKR mn)": 1.002610852593368,
+      "MAPE %": 6.640622404523213,
+      "R\u00b2": 0.9772558523720718
+    }
+  ],
+  "weather": [
+    {
+      "index": "Hybrid ARIMA + RF",
+      "MAE \u00b0C": 0.45059215015518855,
+      "RMSE \u00b0C": 0.5720937811624299,
+      "R\u00b2": 0.7212176861226367
+    },
+    {
+      "index": "ARIMA(2, 0, 2) + Fourier",
+      "MAE \u00b0C": 0.4651602789915376,
+      "RMSE \u00b0C": 0.5953349876965991,
+      "R\u00b2": 0.6981066281953012
+    },
+    {
+      "index": "Random Forest (direct)",
+      "MAE \u00b0C": 0.49046504959099846,
+      "RMSE \u00b0C": 0.6085361285734457,
+      "R\u00b2": 0.6845696345467975
+    },
+    {
+      "index": "Naive (yesterday)",
+      "MAE \u00b0C": 0.4893150684931506,
+      "RMSE \u00b0C": 0.6378474073542143,
+      "R\u00b2": 0.6534512363164309
+    }
+  ],
+  "summary": {
+    "Part A best churn model": "CatBoost (AUC 0.7852, F1 0.432)",
+    "Part B RF vs XGB (CV AUC)": "RF 0.7601 vs XGB 0.7607; p = 0.8724",
+    "Part C best vehicle model": "Hybrid 1: Blend (w_RF=0.59) (MAE LKR 0.60 mn, MAPE 6.2%)",
+    "Part D best weather model": "Hybrid ARIMA + RF (RMSE 0.572 \u00b0C) \u2014 data: REAL \u2013 Open-Meteo archive (ERA5), Colombo",
+    "Innovation: optimizer vs random": "net ROI LKR 1,234,596 vs 501,990"
+  }
+}
