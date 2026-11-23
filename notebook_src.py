@@ -202,8 +202,8 @@ fig, ax = plt.subplots(1, 2, figsize=(16, 5))
 a = arena.sort_values("ROC-AUC")
 ax[0].barh(a.Model, a["ROC-AUC"], color=[fam_colors[f] for f in a.Family])
 ax[0].set_xlim(a["ROC-AUC"].min() - 0.02, a["ROC-AUC"].max() + 0.01); ax[0].set_title("Test ROC-AUC by model (colour = ensemble family)")
-for f, c in fam_colors.items(): ax[0].barh([], [], color=c, label=f)
-ax[0].legend(loc="lower right")
+from matplotlib.patches import Patch
+ax[0].legend(handles=[Patch(color=c, label=f) for f, c in fam_colors.items()], loc="lower right")
 for name in arena.Model[:6]:
     fpr, tpr, _ = roc_curve(yc_te, probs[name]); ax[1].plot(fpr, tpr, label=f"{name} ({roc_auc_score(yc_te, probs[name]):.3f})")
 ax[1].plot([0, 1], [0, 1], "k--", lw=1); ax[1].set_title("ROC curves — top 6 models"); ax[1].set_xlabel("FPR"); ax[1].set_ylabel("TPR"); ax[1].legend(fontsize=8)
@@ -286,7 +286,7 @@ plt.tight_layout(); plt.show()
 
 # %% [markdown]
 # ### Interpreting RF vs XGBoost
-# * **Ensemble-size curve:** RF improves quickly and then **plateaus** — adding trees never hurts RF (it only averages more), but after ~100–200 trees there is little new variance to remove. XGBoost with a small learning rate (0.05) starts **lower** (few trees = under-fitted, high bias) and keeps climbing as each new tree corrects residual errors. This is the bias-vs-variance difference between bagging and boosting seen directly.
+# * **Ensemble-size curve:** RF improves quickly and then **plateaus** — adding trees never hurts RF (it only averages more), but after ~100–200 trees there is little new variance to remove. XGBoost climbs **faster** (each new tree corrects the remaining errors, reducing bias), peaks at around 100 trees and then **declines**: later trees start fitting noise in the training data, i.e. boosting *over-fits* when it runs too long. This is the bias-vs-variance difference between bagging and boosting seen directly — and the reason boosting needs **early stopping** (or a tuned number of trees), while RF does not.
 # * **Which wins and why:** in general boosting often has an edge on structured/tabular data where the signal is a sum of many weak effects (spend, tenure, complaints, reload gaps…). RF's advantage is robustness: almost no tuning, cannot over-fit by adding trees, parallel training. The corrected t-test above tells us whether XGBoost's edge on *this* data is real or within fold-to-fold noise — I report the p-value instead of claiming a winner from one split.
 # * **Feature importance agreement:** both models rank **dual-SIM, competitor offer, complaints, tenure, days since last reload, network quality and fibre bundle** highest, which matches the business story (and the generating process). When two very different algorithms agree on drivers, we can trust the explanation more. I used *permutation* importance because impurity-based RF importance is biased toward high-cardinality numeric features.
 
