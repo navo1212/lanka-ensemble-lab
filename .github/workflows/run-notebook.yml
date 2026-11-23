@@ -6,7 +6,6 @@ on:
     paths:
       - "notebook_src.py"
       - "build_notebook.py"
-      - "data/generate_datasets.py"
       - ".github/workflows/run-notebook.yml"
   workflow_dispatch:
 
@@ -28,11 +27,9 @@ jobs:
           python-version: "3.11"
       - name: Install packages
         run: pip install -q jupyter nbconvert ipykernel xgboost lightgbm catboost statsmodels scikit-learn pandas numpy matplotlib seaborn scipy requests jinja2
-      - name: Generate Sri Lankan-context datasets
-        run: python data/generate_datasets.py
       - name: Build the notebook
         run: python build_notebook.py
-      - name: Execute the notebook (real XGBoost, LightGBM, CatBoost, statsmodels and Colombo weather)
+      - name: Execute the notebook (real XGBoost, LightGBM, CatBoost, statsmodels; real Colombo weather)
         run: jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=3600 --ExecutePreprocessor.kernel_name=python3 LankaEnsemble_Lab.ipynb
       - name: Commit the executed notebook and data
         run: |
