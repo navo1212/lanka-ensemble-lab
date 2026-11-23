@@ -15,8 +15,7 @@ def settle(pg, text, timeout=900_000):
     pg.get_by_text(text).first.wait_for(timeout=timeout)
     t0 = time.time()
     while time.time() - t0 < 600:
-        busy = pg.locator('[data-testid="stSpinner"]').count()
-        if busy == 0:
+        if pg.locator('[data-testid="stSpinner"]').count() == 0:
             break
         time.sleep(1)
     time.sleep(4)
@@ -46,30 +45,23 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     pg = browser.new_page(viewport={"width": 1600, "height": 900}, device_scale_factor=1.2)
     pg.goto(URL)
-    settle(pg, "How the three ensemble families work")
+    settle(pg, "How the ensemble families work")
     shot(pg, "01_home")
-
-    go(pg, "Ensemble Arena", "Best bagging AUC")
+    go(pg, "Ensemble Arena", "Bagging effect")
     shot(pg, "02_arena")
-    shot(pg, "03_arena_trees", "how does accuracy grow")
-    shot(pg, "04_arena_threshold", "Decision threshold explorer")
-
-    go(pg, "Churn Predictor", "Stacking ensemble churn probability")
-    shot(pg, "05_predictor")
-    pg.get_by_role("tab").filter(has_text="Retention budget optimizer").first.click()
-    time.sleep(3)
-    shot(pg, "06_optimizer", "Optimizer net ROI")
-
-    go(pg, "Deal Checker", "Hybrid RF+ANN estimate")
-    shot(pg, "07_deal")
-    shot(pg, "08_deal_hist", scroll=650)
-
-    go(pg, "Colombo Weather", "Hybrid test RMSE")
-    shot(pg, "09_weather")
-    shot(pg, "10_weather_detail", "How the hybrid works")
-
+    go(pg, "RF vs XGBoost", "RF mean CV RMSE")
+    shot(pg, "03_rf_xgb")
+    shot(pg, "04_rf_xgb_cv", scroll=520)
+    go(pg, "Hybrid ARIMA + RF", "Hybrid RMSE")
+    shot(pg, "05_hybrid")
+    shot(pg, "06_hybrid_seasons", "Which model wins in which monsoon season")
+    go(pg, "Hybrid RF + ANN", "error correlation")
+    shot(pg, "07_rf_ann")
+    go(pg, "Tomorrow in Colombo", "Heat alert")
+    shot(pg, "08_tomorrow")
+    shot(pg, "09_tomorrow_chart", scroll=560)
     go(pg, "Research & About", "Random Forest vs gradient boosting")
-    shot(pg, "11_about")
+    shot(pg, "10_about")
     browser.close()
 
 (OUT / "pages.txt").write_text("\n".join(LOG), encoding="utf-8")
