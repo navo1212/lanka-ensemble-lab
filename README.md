@@ -4,7 +4,7 @@
 Hands-on Project (10%) — Ensemble Learning Dashboard
 
 * 📓 **Executed notebook:** [`LankaEnsemble_Lab.ipynb`](LankaEnsemble_Lab.ipynb) · [Open in Colab](https://colab.research.google.com/github/navo1212/lanka-ensemble-lab/blob/main/LankaEnsemble_Lab.ipynb)
-* 📊 **Dashboard:** `streamlit run app.py` — screenshots below were taken automatically by GitHub Actions from the running app (`.github/workflows/screenshots.yml`)
+* 📊 **Live dashboard: https://lanka-ensemble-lab.streamlit.app** — if the app was asleep, the first page needs ~1 minute to train the models (screenshots below were taken automatically by GitHub Actions, `.github/workflows/screenshots.yml`)
 
 One dashboard, three Sri Lankan problems, every major ensemble idea:
 
