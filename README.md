@@ -4,7 +4,7 @@
 Hands-on Project (10%) — Ensemble Learning Dashboard
 
 * 📓 **Executed notebook:** [`LankaEnsemble_Lab.ipynb`](LankaEnsemble_Lab.ipynb) · [Open in Colab](https://colab.research.google.com/github/navo1212/lanka-ensemble-lab/blob/main/LankaEnsemble_Lab.ipynb)
-* 📊 **Live dashboard:** see the link in the repository's *About* box (Streamlit Community Cloud)
+* 📊 **Dashboard:** `streamlit run app.py` — screenshots below were taken automatically by GitHub Actions from the running app (`.github/workflows/screenshots.yml`)
 
 One dashboard, three Sri Lankan problems, every major ensemble idea:
 
@@ -15,6 +15,15 @@ One dashboard, three Sri Lankan problems, every major ensemble idea:
 | C | ikman.lk-style used-car prices (LKR) | 6,000 listings (synthetic, Sri Lankan context) | **Hybrid RF + ANN**: weighted blend, residual hybrid, stacking |
 | D | Colombo daily temperature | **Real** Open-Meteo (ERA5) daily data, 2015 → 2026 | **Hybrid ARIMA + RF** (Zhang 2003 residual hybrid) |
 | 💡 | Innovation | — | **Retention Budget Optimizer** (LKR) · **ikman Deal Checker** with RF fair-price range · next-day Colombo forecast |
+
+## Dashboard screenshots
+| Ensemble Arena (bagging · boosting · stacking) | RF vs XGBoost: accuracy vs number of trees |
+|---|---|
+| ![Ensemble Arena](docs/screenshots/02_arena.png) | ![RF vs XGBoost](docs/screenshots/03_arena_trees.png) |
+| **💡 Retention Budget Optimizer (LKR)** | **💡 ikman Deal Checker (hybrid RF + ANN)** |
+| ![Retention optimizer](docs/screenshots/06_optimizer.png) | ![Deal checker](docs/screenshots/08_deal_hist.png) |
+| **Colombo weather (hybrid ARIMA + RF, real data)** | **Home** |
+| ![Colombo weather](docs/screenshots/09_weather.png) | ![Home](docs/screenshots/01_home.png) |
 
 ## Repository layout
 ```
