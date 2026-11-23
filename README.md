@@ -1,29 +1,28 @@
-# 🇱🇰 LankaEnsemble Lab — Ensemble Learning Dashboard on Sri Lankan Data
+# 🌦️ LankaEnsemble Lab — Forecasting Colombo's Weather with Ensemble Learning
 
 **B.N.V. Gunathilaka · 224059P · Faculty of IT, University of Moratuwa**
 Hands-on Project (10%) — Ensemble Learning Dashboard
 
 * 📓 **Executed notebook:** [`LankaEnsemble_Lab.ipynb`](LankaEnsemble_Lab.ipynb) · [Open in Colab](https://colab.research.google.com/github/navo1212/lanka-ensemble-lab/blob/main/LankaEnsemble_Lab.ipynb)
-* 📊 **Live dashboard: https://lanka-ensemble-lab.streamlit.app** — if the app was asleep, the first page needs ~1 minute to train the models (screenshots below were taken automatically by GitHub Actions, `.github/workflows/screenshots.yml`)
+* 📊 **Live dashboard: https://lanka-ensemble-lab.streamlit.app** — if the app was asleep, the first page needs about a minute to train the models
 
-One dashboard, three Sri Lankan problems, every major ensemble idea:
+**One real Sri Lankan dataset:** daily weather for Colombo, 1 Jan 2015 – 31 Oct 2026, from the free Open-Meteo historical archive (ERA5 reanalysis) — mean/max/min temperature, rainfall, wind and solar radiation (`data/colombo_weather_daily_used.csv`).
+**Task:** forecast **tomorrow's mean temperature** using only information up to today. Test set: the last 365 days.
 
-| Part | Problem | Data | Ensemble technique |
-|---|---|---|---|
-| A | Mobile customer churn | 8,000 customers, 25 districts (synthetic, Sri Lankan context) | **Bagging** (Bagging, RF, Extra Trees) · **Boosting** (AdaBoost, GBM, XGBoost, LightGBM, CatBoost) · **Stacking** & soft voting |
-| B | RF vs XGBoost | same | 5×3 repeated CV + Nadeau–Bengio corrected t-test, ensemble-size curves, permutation importance |
-| C | ikman.lk-style used-car prices (LKR) | 6,000 listings (synthetic, Sri Lankan context) | **Hybrid RF + ANN**: weighted blend, residual hybrid, stacking |
-| D | Colombo daily temperature | **Real** Open-Meteo (ERA5) daily data, 2015 → 2026 | **Hybrid ARIMA + RF** (Zhang 2003 residual hybrid) |
-| 💡 | Innovation | — | **Retention Budget Optimizer** (LKR) · **ikman Deal Checker** with RF fair-price range · next-day Colombo forecast |
+| Part | What | Ensemble idea |
+|---|---|---|
+| A | Ensemble Arena — 13 models | **Bagging** (Bagging, Random Forest, Extra Trees) · **Boosting** (AdaBoost, Gradient Boosting, XGBoost, LightGBM, CatBoost) · **Stacking** & voting |
+| B | Random Forest vs XGBoost | Time-series cross-validation + corrected t-test, error vs number of trees, feature importance |
+| C | ⭐ Hybrid **ARIMA + Random Forest** | ARIMA models the linear/seasonal part, the forest learns ARIMA's errors from rain, wind and radiation |
+| D | Hybrid **Random Forest + neural network** | Weighted blend, residual hybrid, stacking |
+| 💡 | Innovation | Errors by monsoon season · "Tomorrow in Colombo": live forecast, 80% range, heat alert and a rain what-if |
 
 ## Dashboard screenshots
-| Ensemble Arena (bagging · boosting · stacking) | RF vs XGBoost: accuracy vs number of trees |
+| Ensemble Arena | Hybrid ARIMA + RF |
 |---|---|
-| ![Ensemble Arena](docs/screenshots/02_arena.png) | ![RF vs XGBoost](docs/screenshots/03_arena_trees.png) |
-| **💡 Retention Budget Optimizer (LKR)** | **💡 ikman Deal Checker (hybrid RF + ANN)** |
-| ![Retention optimizer](docs/screenshots/06_optimizer.png) | ![Deal checker](docs/screenshots/08_deal_hist.png) |
-| **Colombo weather (hybrid ARIMA + RF, real data)** | **Home** |
-| ![Colombo weather](docs/screenshots/09_weather.png) | ![Home](docs/screenshots/01_home.png) |
+| ![Ensemble Arena](docs/screenshots/02_arena.png) | ![Hybrid](docs/screenshots/05_hybrid.png) |
+| **RF vs XGBoost** | **💡 Tomorrow in Colombo** |
+| ![RF vs XGBoost](docs/screenshots/03_rf_xgb.png) | ![Tomorrow](docs/screenshots/08_tomorrow.png) |
 
 ## Repository layout
 ```
@@ -32,21 +31,16 @@ notebook_src.py                    notebook source in "percent" format (cells se
 build_notebook.py                  turns notebook_src.py into the .ipynb
 app.py                             Streamlit dashboard
 requirements.txt                   dashboard dependencies
-data/generate_datasets.py          seeded generators for the Sri Lankan-context datasets
-data/*.csv                         generated datasets + the real Colombo weather used
+data/colombo_weather_daily_used.csv  the real Colombo weather data (Open-Meteo / ERA5)
 results_summary.json               headline results written by the notebook
-.github/workflows/run-notebook.yml GitHub Actions: generate data → build → execute notebook → commit
-.streamlit/config.toml             dashboard theme
+.github/workflows/run-notebook.yml GitHub Actions: build and execute the notebook, commit the outputs
+.github/workflows/screenshots.yml  GitHub Actions: run the dashboard and screenshot every page
+tools/screenshot_dashboard.py      the screenshot script
 ```
-Every push that changes the notebook source makes **GitHub Actions** regenerate the data, rebuild the notebook and execute it end-to-end with real XGBoost, LightGBM, CatBoost and statsmodels, then commit the executed notebook back to the repository.
 
 ## Run it yourself
-* **Notebook:** click *Open in Colab* above → *Runtime → Run all* (≈ 5 min). No uploads needed: it generates the datasets and downloads the real Colombo weather itself.
+* **Notebook:** click *Open in Colab* → *Runtime → Run all* (≈ 5 min). If the CSV is missing it downloads the data from Open-Meteo itself.
 * **Dashboard:** `pip install -r requirements.txt` then `streamlit run app.py`.
-
-## Data honesty statement
-* **Colombo weather** is **real** daily data from the Open-Meteo historical archive (ERA5 reanalysis) for Colombo (6.93°N, 79.86°E). If the internet is unavailable, a synthetic fallback with the same columns is used and this is shown.
-* **Telecom churn** and **vehicle prices** are **synthetic Sri Lankan-context datasets** generated by me (`data/generate_datasets.py`, fixed seed). Real operator customer data is confidential and mass-scraping ikman.lk breaches its terms of use. The generators encode Sri Lankan patterns: district populations and provinces, Tamil/Sinhala language areas, weaker rural/North-East network quality, dual-SIM behaviour, competitor offers, eZ Cash / reload-card payments, fibre/TV bundles; common local car models (Aqua, Vitz, Wagon R, Vezel, Prado…), recondition vs registered, the 2015–2019 import-ban scarcity premium and old-hybrid battery risk. The pipeline works unchanged on a real CSV with the same columns.
 
 ## Generative AI declaration
 Parts of the code in the notebook and the Streamlit dashboard UI were **generated with the help of Claude (Anthropic)**. I reviewed, ran and tested the code, and the analysis choices, interpretation and conclusions are my own responsibility.

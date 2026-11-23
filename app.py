@@ -1,12 +1,10 @@
 """
-LankaEnsemble Lab — Ensemble Learning Dashboard on Sri Lankan data
+LankaEnsemble Lab — Forecasting Colombo's weather with ensemble learning (one real Sri Lankan dataset)
 B.N.V. Gunathilaka (224059P) — Faculty of IT, University of Moratuwa
 
-Run locally:   pip install -r requirements.txt  &&  streamlit run app.py
-Deploy:        push this folder to GitHub → share.streamlit.io → New app → app.py
-
-AI declaration: the dashboard UI and parts of this code were generated with the help of
-Claude (Anthropic) and reviewed/tested by the student.
+Run locally:  pip install -r requirements.txt  &&  streamlit run app.py
+AI declaration: the dashboard UI and parts of this code were generated with the help of Claude (Anthropic)
+and reviewed/tested by the student.
 """
 import time
 from pathlib import Path
@@ -15,31 +13,33 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
-
-from sklearn.model_selection import train_test_split, cross_val_predict, KFold
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.linear_model import LogisticRegression, RidgeCV
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import (BaggingClassifier, RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier,
-                              GradientBoostingClassifier, StackingClassifier, VotingClassifier,
-                              RandomForestRegressor, StackingRegressor)
+from sklearn.model_selection import TimeSeriesSplit, KFold, cross_val_predict
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import Ridge, RidgeCV
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import (BaggingRegressor, RandomForestRegressor, ExtraTreesRegressor, AdaBoostRegressor,
+                              GradientBoostingRegressor, StackingRegressor, VotingRegressor)
 from sklearn.neural_network import MLPRegressor
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
-                             average_precision_score, roc_curve, confusion_matrix, mean_absolute_error,
-                             mean_squared_error, r2_score, mean_absolute_percentage_error)
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import xgboost as xgb
 import lightgbm as lgb
 from statsmodels.tsa.arima.model import ARIMA
 
 SEED = 42
-NJ = 2   # Streamlit Community Cloud has ~2 CPUs; n_jobs=-1 would start one process per *host* CPU and thrash
+NJ = 2            # Streamlit Community Cloud has ~2 CPUs; n_jobs=-1 would start one process per *host* CPU
+TEST_DAYS = 365
+ORDER = (2, 0, 2)  # chosen by AIC in the notebook
+HEAT_C = 28.5
 DATA = Path(__file__).parent / "data"
-FAM_COL = {"Baseline": "#adb5bd", "Bagging": "#2a9d8f", "Boosting": "#e76f51", "Stacking": "#6a4c93"}
+CSV = DATA / "colombo_weather_daily_used.csv"
+FAM_COL = {"Baseline": "#adb5bd", "Bagging": "#2a9d8f", "Boosting": "#e76f51", "Stacking": "#6a4c93", "Hybrid": "#264653"}
+VARS = ("temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum,"
+        "wind_speed_10m_max,shortwave_radiation_sum")
 
-st.set_page_config(page_title="LankaEnsemble Lab", page_icon="🇱🇰", layout="wide")
-st.markdown("""
-<style>
+st.set_page_config(page_title="LankaEnsemble Lab · Colombo weather", page_icon="🌦️", layout="wide")
+st.markdown("""<style>
 .block-container {padding-top: 1.6rem;}
 .hero {background: linear-gradient(120deg,#8d153a 0%,#eb7400 55%,#ffbe29 100%); color:white; padding:1.6rem 2rem;
        border-radius:16px; margin-bottom:1rem;}
@@ -52,161 +52,61 @@ st.markdown("""
 # =====================================================================================
 # DATA
 # =====================================================================================
-@st.cache_data
-def load_tabular():
-    f1, f2 = DATA / "sl_telecom_churn.csv", DATA / "sl_vehicle_prices.csv"
-    if f1.exists() and f2.exists():
-        return pd.read_csv(f1), pd.read_csv(f2)
-    # first start without CSVs: rebuild the (seeded, reproducible) datasets from the generator
-    import sys
-    sys.path.insert(0, str(DATA))
-    import generate_datasets as g
-    c, v = g.make_churn(), g.make_vehicles()
-    try:
-        c.to_csv(f1, index=False); v.to_csv(f2, index=False)
-    except Exception:
-        pass
-    return c, v
-
-
-@st.cache_data(ttl=24 * 3600, show_spinner="Downloading Colombo weather from Open-Meteo…")
-def load_weather():
-    end = (pd.Timestamp.today() - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+def download(start, end):
+    import requests
     url = ("https://archive-api.open-meteo.com/v1/archive?latitude=6.9271&longitude=79.8612"
-           f"&start_date=2015-01-01&end_date={end}"
-           "&daily=temperature_2m_mean,temperature_2m_max,temperature_2m_min,precipitation_sum,"
-           "wind_speed_10m_max,shortwave_radiation_sum&timezone=Asia%2FColombo")
+           f"&start_date={start}&end_date={end}&daily={VARS}&timezone=Asia%2FColombo")
+    r = requests.get(url, timeout=30); r.raise_for_status()
+    return pd.DataFrame(r.json()["daily"]).rename(columns={"time": "date"})
+
+
+def tidy(d):
+    d = d.copy(); d["date"] = pd.to_datetime(d["date"])
+    return d.set_index("date").asfreq("D").interpolate(limit_direction="both")
+
+
+@st.cache_data
+def load_history():
+    """The fixed dataset used in the notebook: 1 Jan 2015 – 31 Oct 2026."""
+    d = pd.read_csv(CSV) if CSV.exists() else download("2015-01-01", "2026-10-31")
+    return tidy(d).loc["2015-01-01":"2026-10-31"]
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner="Downloading the latest Colombo weather from Open-Meteo…")
+def load_live():
+    end = (pd.Timestamp.now(tz="Asia/Colombo").normalize() - pd.Timedelta(days=6)).strftime("%Y-%m-%d")
     try:
-        import requests
-        r = requests.get(url, timeout=30); r.raise_for_status()
-        d = pd.DataFrame(r.json()["daily"]).rename(columns={"time": "date"})
-        src = "REAL · Open-Meteo archive (ERA5), Colombo — downloaded live"
+        return tidy(download("2015-01-01", end)), "REAL · Open-Meteo archive (ERA5) — downloaded live"
     except Exception:
-        if (DATA / "colombo_weather_daily_used.csv").exists():
-            d = pd.read_csv(DATA / "colombo_weather_daily_used.csv")
-            src = "Saved copy from the notebook run (data/colombo_weather_daily_used.csv)"
-        elif (DATA / "colombo_weather_daily.csv").exists():
-            d = pd.read_csv(DATA / "colombo_weather_daily.csv")
-            src = "SYNTHETIC fallback (no internet)"
-        else:
-            import sys
-            sys.path.insert(0, str(DATA))
-            import generate_datasets as g
-            d = g.make_weather()
-            src = "SYNTHETIC fallback (no internet)"
-    d["date"] = pd.to_datetime(d["date"])
-    d = d.set_index("date").asfreq("D").interpolate(limit_direction="both")
-    return d, src
+        return load_history(), "saved dataset (Open-Meteo was unreachable)"
 
 
-churn_df, veh_df = load_tabular()
-CAT_C = ["district", "province", "area_type", "language", "gender", "plan_type", "payment_method"]
-NUM_C = [c for c in churn_df.columns if c not in CAT_C + ["customer_id", "churn"]]
-CAT_V = ["brand", "model", "fuel_type", "body_type", "transmission", "condition", "district", "seller_type"]
-NUM_V = ["engine_cc", "year_of_manufacture", "vehicle_age", "mileage_km", "previous_owners", "on_lease"]
+def make_features(df):
+    y = df["temperature_2m_mean"]
+    f = pd.DataFrame(index=df.index)
+    for L in [1, 2, 3, 4, 5, 6, 7, 14]:
+        f[f"temp_lag{L}"] = y.shift(L)
+    f["temp_roll7"] = y.shift(1).rolling(7).mean()
+    f["temp_roll30"] = y.shift(1).rolling(30).mean()
+    f["temp_last_year"] = y.shift(365)
+    f["tmax_lag1"] = df["temperature_2m_max"].shift(1)
+    f["tmin_lag1"] = df["temperature_2m_min"].shift(1)
+    f["diurnal_range_lag1"] = f["tmax_lag1"] - f["tmin_lag1"]
+    for L in [1, 2, 3]:
+        f[f"rain_lag{L}"] = df["precipitation_sum"].shift(L)
+        f[f"wind_lag{L}"] = df["wind_speed_10m_max"].shift(L)
+        f[f"rad_lag{L}"] = df["shortwave_radiation_sum"].shift(L)
+    f["rain_3d"] = df["precipitation_sum"].shift(1).rolling(3).sum()
+    f["rain_7d"] = df["precipitation_sum"].shift(1).rolling(7).sum()
+    doy = df.index.dayofyear
+    f["doy_sin"], f["doy_cos"] = np.sin(2 * np.pi * doy / 365.25), np.cos(2 * np.pi * doy / 365.25)
+    f["month"] = df.index.month
+    f["sw_monsoon"] = df.index.month.isin([5, 6, 7, 8, 9]).astype(int)
+    f["ne_monsoon"] = df.index.month.isin([12, 1, 2]).astype(int)
+    return f
 
 
-# =====================================================================================
-# MODEL TRAINING (cached — runs once per server)
-# =====================================================================================
-def churn_model_zoo():
-    base = [("rf", RandomForestClassifier(n_estimators=200, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
-            ("xgb", xgb.XGBClassifier(n_estimators=300, learning_rate=0.05, max_depth=4, subsample=0.8,
-                                      colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=NJ)),
-            ("lgbm", lgb.LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=15, random_state=SEED, verbose=-1)),
-            ("lr", LogisticRegression(max_iter=2000))]
-    return {
-        "Logistic Regression": ("Baseline", LogisticRegression(max_iter=2000)),
-        "Decision Tree": ("Baseline", DecisionTreeClassifier(max_depth=6, random_state=SEED)),
-        "Bagging (Trees)": ("Bagging", BaggingClassifier(DecisionTreeClassifier(), n_estimators=100, random_state=SEED, n_jobs=NJ)),
-        "Random Forest": ("Bagging", RandomForestClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
-        "Extra Trees": ("Bagging", ExtraTreesClassifier(n_estimators=300, min_samples_leaf=3, random_state=SEED, n_jobs=NJ)),
-        "AdaBoost": ("Boosting", AdaBoostClassifier(n_estimators=200, learning_rate=0.5, random_state=SEED)),
-        "Gradient Boosting": ("Boosting", GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, max_depth=3, random_state=SEED)),
-        "XGBoost": ("Boosting", xgb.XGBClassifier(n_estimators=400, learning_rate=0.05, max_depth=4, subsample=0.8,
-                                                  colsample_bytree=0.8, eval_metric="logloss", random_state=SEED, n_jobs=NJ)),
-        "LightGBM": ("Boosting", lgb.LGBMClassifier(n_estimators=400, learning_rate=0.05, num_leaves=15, subsample=0.8,
-                                                    subsample_freq=1, colsample_bytree=0.8, random_state=SEED, verbose=-1)),
-        "Stacking (RF+XGB+LGBM+LR)": ("Stacking", StackingClassifier(base, final_estimator=LogisticRegression(max_iter=2000),
-                                                                     cv=3, stack_method="predict_proba", n_jobs=NJ)),
-        "Soft Voting (RF+XGB+LGBM+LR)": ("Stacking", VotingClassifier(base, voting="soft", n_jobs=NJ)),
-    }
-
-
-def clf_metrics(y, p, thr=0.5):
-    yhat = (p >= thr).astype(int)
-    return {"Accuracy": accuracy_score(y, yhat), "Precision": precision_score(y, yhat, zero_division=0),
-            "Recall": recall_score(y, yhat), "F1": f1_score(y, yhat), "ROC-AUC": roc_auc_score(y, p),
-            "PR-AUC": average_precision_score(y, p)}
-
-
-@st.cache_resource(show_spinner="Training 11 churn models (bagging, boosting, stacking)… first load ≈ 1 min")
-def train_churn():
-    X = churn_df[CAT_C + NUM_C]; y = churn_df["churn"].values
-    Xtr_raw, Xte_raw, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=SEED)
-    pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CAT_C),
-                             ("num", StandardScaler(), NUM_C)])
-    Xtr, Xte = pre.fit_transform(Xtr_raw), pre.transform(Xte_raw)
-    feats = [f.split("__", 1)[1] for f in pre.get_feature_names_out()]
-    models, probs, rows = {}, {}, []
-    for name, (fam, m) in churn_model_zoo().items():
-        t0 = time.time(); m.fit(Xtr, ytr); secs = time.time() - t0
-        p = m.predict_proba(Xte)[:, 1]
-        models[name], probs[name] = m, p
-        rows.append({"Model": name, "Family": fam, **clf_metrics(yte, p), "Train s": secs})
-    board = pd.DataFrame(rows).sort_values("ROC-AUC", ascending=False).reset_index(drop=True)
-    # ensemble-size curves: RF vs XGBoost
-    Ns = [5, 10, 25, 50, 100, 200, 300, 400]
-    rf_w = RandomForestClassifier(min_samples_leaf=3, random_state=SEED, n_jobs=NJ, warm_start=True)
-    rf_curve = []
-    for n in Ns:
-        rf_w.set_params(n_estimators=n); rf_w.fit(Xtr, ytr)
-        rf_curve.append(roc_auc_score(yte, rf_w.predict_proba(Xte)[:, 1]))
-    xg = models["XGBoost"]
-    xgb_curve = [roc_auc_score(yte, xg.predict_proba(Xte, iteration_range=(0, n))[:, 1]) for n in Ns]
-    curve = pd.DataFrame({"Random Forest": rf_curve, "XGBoost": xgb_curve}, index=pd.Index(Ns, name="trees"))
-    test_df = churn_df.loc[Xte_raw.index].copy()
-    return dict(pre=pre, feats=feats, models=models, probs=probs, board=board, yte=yte, curve=curve, test_df=test_df)
-
-
-@st.cache_resource(show_spinner="Training RF, ANN and hybrid RF+ANN price models…")
-def train_vehicle():
-    X = veh_df[CAT_V + NUM_V]; y = np.log(veh_df["price_lkr_mn"].values)
-    Xtr_raw, Xte_raw, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=SEED)
-    pre = ColumnTransformer([("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), CAT_V),
-                             ("num", StandardScaler(), NUM_V)])
-    Xtr, Xte = pre.fit_transform(Xtr_raw), pre.transform(Xte_raw)
-    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=2, max_features=0.5, random_state=SEED, n_jobs=NJ)
-    ann = MLPRegressor(hidden_layer_sizes=(128, 64), alpha=1e-3, learning_rate_init=2e-3, max_iter=600,
-                       early_stopping=True, n_iter_no_change=25, random_state=SEED)
-    kf = KFold(5, shuffle=True, random_state=SEED)
-    oof_rf = cross_val_predict(rf, Xtr, ytr, cv=kf, n_jobs=NJ)
-    oof_ann = cross_val_predict(ann, Xtr, ytr, cv=kf)
-    rf.fit(Xtr, ytr); ann.fit(Xtr, ytr)
-    ws = np.linspace(0, 1, 101)
-    w = float(ws[np.argmin([mean_squared_error(ytr, a * oof_rf + (1 - a) * oof_ann) for a in ws])])
-    res_ann = MLPRegressor(hidden_layer_sizes=(64, 32), alpha=1e-2, max_iter=600, early_stopping=True,
-                           n_iter_no_change=25, random_state=SEED).fit(np.column_stack([Xtr, oof_rf]), ytr - oof_rf)
-    stack = StackingRegressor([("rf", RandomForestRegressor(n_estimators=200, min_samples_leaf=2, max_features=0.5,
-                                                            random_state=SEED, n_jobs=NJ)),
-                               ("ann", MLPRegressor(hidden_layer_sizes=(128, 64), alpha=1e-3, learning_rate_init=2e-3,
-                                                    max_iter=600, early_stopping=True, n_iter_no_change=25,
-                                                    random_state=SEED))],
-                              final_estimator=RidgeCV(), cv=5, n_jobs=NJ).fit(Xtr, ytr)
-    p_rf, p_ann = rf.predict(Xte), ann.predict(Xte)
-    preds = {"Random Forest": p_rf, "ANN (MLP)": p_ann, f"Hybrid: Blend (w_RF={w:.2f})": w * p_rf + (1 - w) * p_ann,
-             "Hybrid: RF + ANN residual": p_rf + res_ann.predict(np.column_stack([Xte, p_rf])),
-             "Hybrid: Stacking → Ridge": stack.predict(Xte)}
-
-    def m(yl, pl):
-        a, b = np.exp(yl), np.exp(pl)
-        return {"MAE (LKR mn)": mean_absolute_error(a, b), "RMSE (LKR mn)": np.sqrt(mean_squared_error(a, b)),
-                "MAPE %": 100 * mean_absolute_percentage_error(a, b), "R²": r2_score(a, b)}
-    board = pd.DataFrame({k: m(yte, v) for k, v in preds.items()}).T.sort_values("MAE (LKR mn)")
-    return dict(pre=pre, rf=rf, ann=ann, w=w, board=board, preds=preds, yte=yte)
-
-
-def ts_features(df, resid, y):
+def resid_features(df, resid, y):
     f = pd.DataFrame(index=df.index)
     for L in range(1, 8):
         f[f"resid_lag{L}"] = resid.shift(L)
@@ -226,377 +126,369 @@ def ts_features(df, resid, y):
     return f
 
 
-def fourier(idx, t0):
+def fourier(idx, start):
     doy = idx.dayofyear.values
-    t = (idx - t0).days.values
     return pd.DataFrame({"s1": np.sin(2 * np.pi * doy / 365.25), "c1": np.cos(2 * np.pi * doy / 365.25),
                          "s2": np.sin(4 * np.pi * doy / 365.25), "c2": np.cos(4 * np.pi * doy / 365.25),
-                         "trend": t / 3652.5}, index=idx)
+                         "trend": (idx - start).days.values / 3652.5}, index=idx)
 
 
-@st.cache_resource(show_spinner="Fitting ARIMA and the ARIMA + RF hybrid on Colombo weather…")
-def train_weather(test_days=365):
-    wx, src = load_weather()
-    y = wx["temperature_2m_mean"].astype(float)
+def metrics(y, p):
+    return {"MAE °C": mean_absolute_error(y, p), "RMSE °C": float(np.sqrt(mean_squared_error(y, p))), "R²": r2_score(y, p)}
+
+
+def ann(hidden=(64, 32)):
+    return TransformedTargetRegressor(MLPRegressor(hidden_layer_sizes=hidden, alpha=1e-2, learning_rate_init=1e-3,
+                                                   max_iter=800, early_stopping=True, validation_fraction=0.15,
+                                                   n_iter_no_change=30, random_state=SEED), transformer=StandardScaler())
+
+
+def split():
+    wx = load_history(); y = wx["temperature_2m_mean"]; X = make_features(wx)
+    ok = X.dropna().index; te = wx.index[-TEST_DAYS:]; tr = ok[ok < te[0]]
+    return wx, y, X, tr, te
+
+
+# =====================================================================================
+# MODELS (cached — trained once per server start)
+# =====================================================================================
+@st.cache_resource(show_spinner="Training 12 ensemble models on 10 years of Colombo weather… (first load ≈ 1 min)")
+def train_arena():
+    wx, y, X, tr, te = split()
+    base = [("rf", RandomForestRegressor(n_estimators=200, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)),
+            ("xgb", xgb.XGBRegressor(n_estimators=400, learning_rate=0.03, max_depth=4, subsample=0.8, colsample_bytree=0.8, random_state=SEED, n_jobs=NJ)),
+            ("lgbm", lgb.LGBMRegressor(n_estimators=400, learning_rate=0.03, num_leaves=15, subsample=0.8, subsample_freq=1, colsample_bytree=0.8, random_state=SEED, verbose=-1, n_jobs=NJ)),
+            ("ridge", make_pipeline(StandardScaler(), Ridge(alpha=1.0)))]
+    zoo = {
+        "Ridge regression": ("Baseline", make_pipeline(StandardScaler(), Ridge(alpha=1.0))),
+        "Decision Tree": ("Baseline", DecisionTreeRegressor(max_depth=6, min_samples_leaf=10, random_state=SEED)),
+        "Bagging (Trees)": ("Bagging", BaggingRegressor(DecisionTreeRegressor(min_samples_leaf=3), n_estimators=100, random_state=SEED, n_jobs=NJ)),
+        "Random Forest": ("Bagging", RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)),
+        "Extra Trees": ("Bagging", ExtraTreesRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.7, random_state=SEED, n_jobs=NJ)),
+        "AdaBoost": ("Boosting", AdaBoostRegressor(DecisionTreeRegressor(max_depth=4), n_estimators=200, learning_rate=0.05, random_state=SEED)),
+        "Gradient Boosting": ("Boosting", GradientBoostingRegressor(n_estimators=300, learning_rate=0.05, max_depth=3, subsample=0.8, random_state=SEED)),
+        "XGBoost": ("Boosting", xgb.XGBRegressor(n_estimators=600, learning_rate=0.03, max_depth=4, subsample=0.8, colsample_bytree=0.8, random_state=SEED, n_jobs=NJ)),
+        "LightGBM": ("Boosting", lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=15, subsample=0.8, subsample_freq=1, colsample_bytree=0.8, random_state=SEED, verbose=-1, n_jobs=NJ)),
+        "Stacking (RF+XGB+LGBM+Ridge)": ("Stacking", StackingRegressor(base, final_estimator=RidgeCV(), cv=KFold(5), n_jobs=NJ)),
+        "Voting (average)": ("Stacking", VotingRegressor(base, n_jobs=NJ)),
+    }
+    naive = y.shift(1).loc[te]
+    rows = [{"Model": "Naive (tomorrow = today)", "Family": "Baseline", **metrics(y.loc[te], naive), "Train s": 0.0}]
+    preds, models = {"Naive (tomorrow = today)": naive.values}, {}
+    for name, (fam, m) in zoo.items():
+        t0 = time.time(); m.fit(X.loc[tr], y.loc[tr]); secs = time.time() - t0
+        preds[name], models[name] = m.predict(X.loc[te]), m
+        rows.append({"Model": name, "Family": fam, **metrics(y.loc[te], preds[name]), "Train s": secs})
+    board = pd.DataFrame(rows).sort_values("RMSE °C").reset_index(drop=True)
+    naive_rmse = board.set_index("Model").loc["Naive (tomorrow = today)", "RMSE °C"]
+    board["Skill vs naive %"] = 100 * (1 - board["RMSE °C"] / naive_rmse)
+    # RF vs XGBoost: error vs number of trees
+    Ns = [10, 25, 50, 100, 200, 300, 400, 600]
+    rf_w = RandomForestRegressor(min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ, warm_start=True)
+    rf_curve = []
+    for n in Ns:
+        rf_w.set_params(n_estimators=n); rf_w.fit(X.loc[tr], y.loc[tr])
+        rf_curve.append(np.sqrt(mean_squared_error(y.loc[te], rf_w.predict(X.loc[te]))))
+    xgb_curve = [np.sqrt(mean_squared_error(y.loc[te], models["XGBoost"].predict(X.loc[te], iteration_range=(0, n)))) for n in Ns]
+    curve = pd.DataFrame({"Random Forest": rf_curve, "XGBoost": xgb_curve}, index=Ns)
+    # RF vs XGBoost: time-series cross-validation (each fold tests on the next unseen year)
+    cv = {"Random Forest": [], "XGBoost": []}
+    for f_tr, f_va in TimeSeriesSplit(n_splits=5, test_size=365).split(X.loc[tr]):
+        Xa, ya = X.loc[tr].iloc[f_tr], y.loc[tr].iloc[f_tr]; Xb, yb = X.loc[tr].iloc[f_va], y.loc[tr].iloc[f_va]
+        for nm, mdl in [("Random Forest", RandomForestRegressor(n_estimators=200, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)),
+                        ("XGBoost", xgb.XGBRegressor(n_estimators=600, learning_rate=0.03, max_depth=4, subsample=0.8, colsample_bytree=0.8, random_state=SEED, n_jobs=NJ))]:
+            cv[nm].append(np.sqrt(mean_squared_error(yb, mdl.fit(Xa, ya).predict(Xb))))
+    imp = pd.DataFrame({"Random Forest": models["Random Forest"].feature_importances_,
+                        "XGBoost": models["XGBoost"].feature_importances_}, index=X.columns)
+    return dict(board=board, preds=preds, models=models, te=te, y_te=y.loc[te], curve=curve, cv=pd.DataFrame(cv), imp=imp / imp.sum())
+
+
+@st.cache_resource(show_spinner="Fitting ARIMA and the hybrid ARIMA + Random Forest…")
+def train_hybrid():
+    wx, y, X, tr, te = split()
     F = fourier(wx.index, wx.index[0])
-    ytr, yte = y.iloc[:-test_days], y.iloc[-test_days:]
-    order = (2, 0, 1)
-    ar = ARIMA(ytr, exog=F.iloc[:-test_days], order=order, trend="c").fit()
-    full = ar.append(yte, exog=F.iloc[-test_days:], refit=False)
-    fc_all = full.fittedvalues
-    resid = y - fc_all
-    feats = ts_features(wx, resid, y)
-    valid = feats.dropna().index
-    tr = valid[valid < yte.index[0]][30:]
-    te = yte.index
+    ar = ARIMA(y.iloc[:-TEST_DAYS], exog=F.iloc[:-TEST_DAYS], order=ORDER, trend="c").fit()
+    full = ar.append(y.iloc[-TEST_DAYS:], exog=F.iloc[-TEST_DAYS:], refit=False)
+    fc = full.fittedvalues; resid = y - fc
+    R = resid_features(wx, resid, y); valid = R.dropna().index; h_tr = valid[valid < te[0]][30:]
+    # same settings as the notebook (500 trees, seed 42), so the dashboard shows exactly the notebook's hybrid result
+    rf = RandomForestRegressor(n_estimators=500, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ).fit(R.loc[h_tr], resid.loc[h_tr])
+    hybrid = fc.loc[te] + rf.predict(R.loc[te])
+    A = train_arena()
+    pred = pd.DataFrame({"Actual": y.loc[te], "Naive (tomorrow = today)": y.shift(1).loc[te], "ARIMA + Fourier": fc.loc[te],
+                         "Random Forest": A["preds"]["Random Forest"], "XGBoost": A["preds"]["XGBoost"],
+                         "Stacking": A["preds"]["Stacking (RF+XGB+LGBM+Ridge)"], "★ Hybrid ARIMA + RF": hybrid}, index=te)
+    board = pd.DataFrame({c: metrics(pred.Actual, pred[c]) for c in pred.columns[1:]}).T.sort_values("RMSE °C")
+    season = np.select([te.month.isin([12, 1, 2]), te.month.isin([3, 4]), te.month.isin([5, 6, 7, 8, 9])],
+                       ["NE monsoon (Dec–Feb)", "1st inter-monsoon (Mar–Apr)", "SW monsoon (May–Sep)"], "2nd inter-monsoon (Oct–Nov)")
+    seas = pd.DataFrame({c: [float(np.sqrt(np.mean((pred.Actual.values[season == s] - pred[c].values[season == s]) ** 2)))
+                             for s in pd.unique(season)] for c in pred.columns[1:]}, index=pd.unique(season))
+    err = (pred.Actual - hybrid).values
+    imp = pd.Series(rf.feature_importances_, index=R.columns).sort_values(ascending=False)
+    return dict(pred=pred, board=board, seas=seas, q=np.quantile(err, [0.10, 0.90]), imp=imp)
+
+
+@st.cache_resource(show_spinner="Training Random Forest + neural network hybrids…")
+def train_rf_ann():
+    wx, y, X, tr, te = split()
+    Xtr, ytr, Xte = X.loc[tr], y.loc[tr], X.loc[te]
+    sc = StandardScaler().fit(Xtr); Str, Ste = sc.transform(Xtr), sc.transform(Xte)
     rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)
-    rf.fit(feats.loc[tr], resid.loc[tr])
-    hybrid = fc_all.loc[te] + rf.predict(feats.loc[te])
-    dcols = [c for c in feats.columns if not c.startswith("resid_")]
-    rfd = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)
-    rfd.fit(feats.loc[tr, dcols], y.loc[tr])
-    preds = pd.DataFrame({"Actual": yte, "Naive (yesterday)": y.shift(1).loc[te], "ARIMA + Fourier": fc_all.loc[te],
-                          "Random Forest (direct)": rfd.predict(feats.loc[te, dcols]), "Hybrid ARIMA + RF": hybrid})
-    board = pd.DataFrame({c: {"MAE °C": mean_absolute_error(preds.Actual, preds[c]),
-                              "RMSE °C": np.sqrt(mean_squared_error(preds.Actual, preds[c])),
-                              "R²": r2_score(preds.Actual, preds[c])} for c in preds.columns[1:]}).T.sort_values("RMSE °C")
-    # tomorrow's forecast (day after the last observation)
+    nn = ann()
+    oof_rf = cross_val_predict(rf, Xtr, ytr, cv=KFold(5), n_jobs=NJ); oof_nn = cross_val_predict(nn, Str, ytr, cv=KFold(5))
+    rf.fit(Xtr, ytr); nn.fit(Str, ytr)
+    p_rf, p_nn = rf.predict(Xte), nn.predict(Ste)
+    ws = np.linspace(0, 1, 101)
+    w = float(ws[np.argmin([mean_squared_error(ytr, a * oof_rf + (1 - a) * oof_nn) for a in ws])])
+    res = ann((32,)).fit(np.column_stack([Str, oof_rf]), ytr - oof_rf)
+    stack = StackingRegressor([("rf", RandomForestRegressor(n_estimators=200, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ)),
+                               ("ann", make_pipeline(StandardScaler(), ann()))], final_estimator=RidgeCV(), cv=KFold(5), n_jobs=NJ).fit(Xtr, ytr)
+    preds = {"Random Forest": p_rf, "ANN (MLP)": p_nn, f"Hybrid: Blend (w_RF={w:.2f})": w * p_rf + (1 - w) * p_nn,
+             "Hybrid: RF + ANN residual": p_rf + res.predict(np.column_stack([Ste, p_rf])), "Hybrid: Stacking → Ridge": stack.predict(Xte)}
+    board = pd.DataFrame({k: metrics(y.loc[te], v) for k, v in preds.items()}).T.sort_values("RMSE °C")
+    return dict(board=board, preds=preds, y_te=y.loc[te], te=te, corr=float(np.corrcoef(y.loc[te] - p_rf, y.loc[te] - p_nn)[0, 1]))
+
+
+@st.cache_resource(ttl=6 * 3600, show_spinner="Updating the hybrid with the latest weather…")
+def train_live():
+    wx, src = load_live()
+    y = wx["temperature_2m_mean"]; F = fourier(wx.index, wx.index[0])
+    ar = ARIMA(y, exog=F, order=ORDER, trend="c").fit()
+    resid = y - ar.fittedvalues
+    R = resid_features(wx, resid, y); valid = R.dropna().index[30:]
+    rf = RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5, random_state=SEED, n_jobs=NJ).fit(R.loc[valid], resid.loc[valid])
     nxt = wx.index[-1] + pd.Timedelta(days=1)
-    wx2 = pd.concat([wx, pd.DataFrame(index=[nxt], columns=wx.columns, dtype=float)])
-    wx2.index.name = "date"
-    y2 = pd.concat([y, pd.Series([np.nan], index=[nxt])])
-    r2_ = pd.concat([resid, pd.Series([np.nan], index=[nxt])])
-    f_next = ts_features(wx2, r2_, y2).loc[[nxt]]
-    a_next = float(np.asarray(full.forecast(1, exog=fourier(pd.DatetimeIndex([nxt]), wx.index[0])))[0])
-    h_next = a_next + float(rf.predict(f_next)[0])
-    imp = pd.Series(rf.feature_importances_, index=feats.columns).sort_values(ascending=False)
-    return dict(wx=wx, src=src, preds=preds, board=board, imp=imp, nxt=nxt, a_next=a_next, h_next=h_next, order=order)
+    a_next = float(np.asarray(ar.forecast(1, exog=fourier(pd.DatetimeIndex([nxt]), wx.index[0])))[0])
+    return dict(wx=wx, src=src, resid=resid, rf=rf, nxt=nxt, a_next=a_next)
+
+
+def next_day_rows(wx, resid, rain=None, rad=None, wind=None):
+    """Feature rows for the day after the last observation, optionally with 'what-if' weather for the last day."""
+    w = wx.copy()
+    last = w.index[-1]
+    if rain is not None: w.loc[last, "precipitation_sum"] = rain
+    if rad is not None: w.loc[last, "shortwave_radiation_sum"] = rad
+    if wind is not None: w.loc[last, "wind_speed_10m_max"] = wind
+    nxt = last + pd.Timedelta(days=1)
+    w2 = pd.concat([w, pd.DataFrame(index=[nxt], columns=w.columns, dtype=float)])
+    y2 = w2["temperature_2m_mean"]
+    r2 = pd.concat([resid, pd.Series([np.nan], index=[nxt])])
+    return resid_features(w2, r2, y2).loc[[nxt]], make_features(w2).loc[[nxt]]
+
+
+def show_fig(fig):
+    st.pyplot(fig); plt.close(fig)
+
+
+def fig_barh(series, colors=None, title="", xlabel="", xlim=None):
+    fig, ax = plt.subplots(figsize=(7, max(2.6, 0.4 * len(series))))
+    ax.barh(series.index[::-1], series.values[::-1], color=(colors[::-1] if colors is not None else "#2a9d8f"))
+    ax.set_title(title); ax.set_xlabel(xlabel); ax.grid(axis="x", alpha=.3)
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    fig.tight_layout(); return fig
+
+
+def fig_lines(df, cols, days, title=""):
+    styles = {"Actual": dict(color="black", lw=2.2), "Naive (tomorrow = today)": dict(color="#adb5bd", lw=1.2, ls=":"),
+              "ARIMA + Fourier": dict(color="#4c72b0", lw=1.6, ls="--"), "★ Hybrid ARIMA + RF": dict(color="#e76f51", lw=2.0)}
+    fig, ax = plt.subplots(figsize=(13, 4.2))
+    for c in cols:
+        s_ = df[c].iloc[-days:]
+        ax.plot(s_.index, s_.values, label=c, **styles.get(c, dict(lw=1.5)))
+    ax.set_ylabel("°C (daily mean)"); ax.set_title(title); ax.grid(alpha=.3)
+    ax.legend(ncol=min(4, max(1, len(cols))), loc="upper center", fontsize=9, frameon=False)
+    fig.autofmt_xdate(); fig.tight_layout(); return fig
 
 
 # =====================================================================================
 # UI
 # =====================================================================================
-PAGES = ["🏠 Home & Story", "⚔️ Ensemble Arena (Churn)", "🎯 Churn Predictor & Retention Optimizer",
-         "🚗 ikman Deal Checker (RF + ANN)", "🌦️ Colombo Weather (ARIMA + RF)", "ℹ️ Research & About"]
+PAGES = ["🏠 Home & Story", "⚔️ Ensemble Arena", "🌲 RF vs XGBoost", "★ Hybrid ARIMA + RF",
+         "🧠 Hybrid RF + ANN", "💡 Tomorrow in Colombo", "ℹ️ Research & About"]
 with st.sidebar:
-    st.markdown("## 🇱🇰 LankaEnsemble Lab")
-    st.caption("Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data")
+    st.markdown("## 🌦️ LankaEnsemble Lab")
+    st.caption("Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)")
     page = st.radio("Navigate", PAGES, index=0)
     st.divider()
     st.caption("B.N.V. Gunathilaka · 224059P\nFaculty of IT, University of Moratuwa")
     st.caption("🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.")
 
-
-def show_fig(fig):
-    st.pyplot(fig)
-    plt.close(fig)
-
-
-def fig_bar(series, colors=None, title="", xlabel="", xlim=None):
-    fig, ax = plt.subplots(figsize=(7, max(2.5, 0.38 * len(series))))
-    ax.barh(series.index[::-1], series.values[::-1], color=(colors[::-1] if colors is not None else "#2a9d8f"))
-    ax.set_title(title); ax.set_xlabel(xlabel); ax.grid(axis="x", alpha=.3)
-    if xlim is not None:
-        ax.set_xlim(*xlim)
-    fig.tight_layout()
-    return fig
-
-
-# ---------------------------------------------------------------- HOME
 if page == PAGES[0]:
-    st.markdown("""<div class="hero"><h1>🇱🇰 LankaEnsemble Lab</h1>
-    <p>One dashboard, three Sri Lankan problems, every major ensemble idea:
+    st.markdown("""<div class="hero"><h1>🌦️ LankaEnsemble Lab — Colombo weather</h1>
+    <p>Can ensemble learning forecast <b>tomorrow's temperature in Colombo</b>? One real dataset, every major ensemble idea:
     <b>Bagging</b>, <b>Boosting</b>, <b>Stacking</b> and <b>hybrid models</b>.</p></div>""", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    c1.markdown("""<div class="card"><h3>📱 Telecom churn</h3>8,000 mobile customers in 25 districts. Most carry
-    <b>two SIMs</b> — one competitor offer and they're gone. <br><br><b>Which ensemble catches them first?</b><br>
-    <span class="tag" style="background:#2a9d8f">Bagging</span><span class="tag" style="background:#e76f51">Boosting</span>
-    <span class="tag" style="background:#6a4c93">Stacking</span></div>""", unsafe_allow_html=True)
-    c2.markdown("""<div class="card"><h3>🚗 ikman.lk car prices</h3>6,000 used-vehicle listings — Aqua, Vitz, Wagon R,
-    Vezel, Prado… in LKR. <br><br><b>Is that asking price fair?</b><br>
-    <span class="tag" style="background:#264653">Hybrid RF + ANN</span></div>""", unsafe_allow_html=True)
-    c3.markdown("""<div class="card"><h3>🌦️ Colombo weather</h3>10+ years of daily Colombo weather, monsoons included.
-    <br><br><b>What will tomorrow's temperature be?</b><br>
-    <span class="tag" style="background:#457b9d">Hybrid ARIMA + RF</span></div>""", unsafe_allow_html=True)
-    st.write("")
-    st.subheader("How the three ensemble families work")
+    wx = load_history()
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Days of real data", f"{len(wx):,}")
+    k2.metric("Period", f"{wx.index.min().year} – {wx.index.max().year}")
+    k3.metric("Mean temperature", f"{wx['temperature_2m_mean'].mean():.1f} °C")
+    k4.metric("Average yearly rain", f"{wx['precipitation_sum'].sum() / (len(wx) / 365.25):,.0f} mm")
+    c1, c2 = st.columns(2)
+    mon = wx.groupby(wx.index.month).agg(temp=("temperature_2m_mean", "mean"), rain=("precipitation_sum", "sum"))
+    mon["rain"] /= wx.index.year.nunique()
+    names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    with c1:
+        fig, ax = plt.subplots(figsize=(6.5, 3.4))
+        ax.bar(names, mon.rain, color=["#e76f51" if m in (5, 6, 7, 8, 9) else ("#457b9d" if m in (12, 1, 2) else "#adb5bd") for m in mon.index])
+        ax.set_title("Rain per month (mm) · orange = SW monsoon · blue = NE monsoon", fontsize=10); ax.grid(axis="y", alpha=.3)
+        fig.tight_layout(); show_fig(fig)
+    with c2:
+        fig, ax = plt.subplots(figsize=(6.5, 3.4))
+        ax.plot(names, mon.temp, "o-", color="#e76f51"); ax.set_title("Average daily mean temperature (°C)", fontsize=10); ax.grid(alpha=.3)
+        fig.tight_layout(); show_fig(fig)
+    st.subheader("How the ensemble families work")
     a, b, c = st.columns(3)
-    a.info("**Bagging** 🌳🌳🌳 → average\n\nMany deep trees trained **in parallel** on bootstrap samples. "
-           "Averaging cancels their individual mistakes → **reduces variance**. *Random Forest, Extra Trees.*")
-    b.warning("**Boosting** 🌱→🌿→🌳 sequential\n\nShallow trees built **one after another**, each fixing the errors "
-              "of the previous ones → **reduces bias**. *AdaBoost, Gradient Boosting, XGBoost, LightGBM.*")
-    c.success("**Stacking** 🧠 meta-learner\n\nDifferent model types (RF, XGB, LGBM, LR) make predictions; a "
-              "**meta-model learns how much to trust each one**. *Stacking, soft voting.*")
-    st.subheader("💡 Innovation — from predictions to decisions")
-    st.markdown("- **Retention Budget Optimizer:** turns churn probabilities into *LKR saved* and picks whom to call within a budget.\n"
-                "- **ikman Deal Checker:** uses the spread of 300 Random-Forest trees to give a **fair-price range**, not just one number.\n"
-                "- **Tomorrow's Colombo forecast:** ARIMA handles trend & season, RF learns the monsoon-driven non-linear errors.")
-    with st.expander("⚠️ Data honesty statement"):
-        st.markdown("* **Colombo weather** is **real** (Open-Meteo ERA5 archive, downloaded live; offline fallback is synthetic).\n"
-                    "* **Telecom churn** and **vehicle prices** are **synthetic Sri Lankan-context datasets** generated by the "
-                    "student (real operator data is confidential; mass-scraping ikman.lk breaches its terms). The generators "
-                    "encode local patterns: district populations, language areas, rural network quality, dual-SIM use, eZ Cash "
-                    "reloads, popular car models, recondition vs registered, import-ban premium. Code is in `data/generate_datasets.py`.")
+    a.info("**Bagging** 🌳🌳🌳 → average\n\nMany deep trees trained **in parallel** on bootstrap samples; averaging cancels their "
+           "mistakes → **reduces variance**. *Random Forest, Extra Trees.*")
+    b.warning("**Boosting** 🌱→🌿→🌳 sequential\n\nSmall trees built **one after another**, each fixing the previous errors → "
+              "**reduces bias**. *XGBoost, LightGBM, Gradient Boosting, AdaBoost.*")
+    c.success("**Stacking & hybrids** 🧠\n\nDifferent models combined: a meta-model learns whom to trust, or **ARIMA + Random Forest** "
+              "split the work (linear season vs non-linear weather).")
+    st.markdown("**💡 Innovation:** errors by monsoon season, and a live **Tomorrow in Colombo** forecast with an 80% range, "
+                "a heat alert and a *rain what-if*.")
+    st.caption("Data: real daily weather for Colombo (6.93°N, 79.86°E) from the Open-Meteo historical archive (ERA5 reanalysis). "
+               "Target: tomorrow's daily mean temperature, using only information up to today. Test set: the last 365 days (Nov 2025 – Oct 2026).")
 
-# ---------------------------------------------------------------- ARENA
 elif page == PAGES[1]:
-    st.title("⚔️ Ensemble Arena — who predicts churn best?")
-    R = train_churn()
-    board = R["board"]
-    fams = st.multiselect("Show ensemble families", list(FAM_COL), default=list(FAM_COL))
-    metric = st.selectbox("Rank by", ["ROC-AUC", "PR-AUC", "F1", "Accuracy", "Recall", "Precision"], index=0)
-    b = board[board.Family.isin(fams)].sort_values(metric, ascending=False)
+    st.title("⚔️ Ensemble Arena — who forecasts tomorrow best?")
+    A = train_arena(); board = A["board"]
+    fams = st.multiselect("Show families", ["Baseline", "Bagging", "Boosting", "Stacking"], default=["Baseline", "Bagging", "Boosting", "Stacking"])
+    metric = st.selectbox("Rank by", ["RMSE °C", "MAE °C", "R²"], index=0)
+    asc = metric != "R²"
+    b = board[board.Family.isin(fams)].sort_values(metric, ascending=asc)
     top = b.iloc[0] if len(b) else board.iloc[0]
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("🏆 Best model", top.Model)
-    k2.metric(f"Best {metric}", f"{top[metric]:.4f}")
-    k3.metric("Best bagging AUC", f"{board[board.Family == 'Bagging']['ROC-AUC'].max():.4f}")
-    k4.metric("Best boosting AUC", f"{board[board.Family == 'Boosting']['ROC-AUC'].max():.4f}")
-    left, right = st.columns([1.15, 1])
-    with left:
-        lo, hi = b[metric].min(), b[metric].max()
-        pad = max(0.01, (hi - lo) * 0.25)
-        show_fig(fig_bar(b.set_index("Model")[metric], colors=[FAM_COL[f] for f in b.Family],
-                          title=f"{metric} on 1,600 unseen customers", xlabel=metric,
-                          xlim=(max(0, lo - pad), min(1, hi + pad / 2))))
-        st.caption("🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline")
-    with right:
-        sel = st.multiselect("ROC curves for", list(b.Model), default=list(b.Model[:4]))
-        fig, ax = plt.subplots(figsize=(6, 5))
-        for n in sel:
-            fpr, tpr, _ = roc_curve(R["yte"], R["probs"][n]); ax.plot(fpr, tpr, label=f"{n} ({roc_auc_score(R['yte'], R['probs'][n]):.3f})")
-        ax.plot([0, 1], [0, 1], "k--", lw=1); ax.set_xlabel("False positive rate"); ax.set_ylabel("True positive rate")
-        ax.legend(fontsize=7); ax.set_title("ROC curves"); fig.tight_layout(); show_fig(fig)
-    st.dataframe(b.style.format({c: "{:.4f}" for c in ["Accuracy", "Precision", "Recall", "F1", "ROC-AUC", "PR-AUC"]} | {"Train s": "{:.1f}"})
-                 .background_gradient(subset=[metric], cmap="Greens"), hide_index=True)
-
-    st.subheader("🌲 vs 🚀 Random Forest vs XGBoost — how does accuracy grow with more trees?")
-    c1, c2 = st.columns([1.3, 1])
+    k2.metric(f"Best {metric}", f"{top[metric]:.3f}")
+    k3.metric("Skill vs naive", f"{top['Skill vs naive %']:+.1f}%")
+    k4.metric("Bagging effect (tree → RF)", f"{board.set_index('Model').loc['Decision Tree', 'RMSE °C']:.3f} → {board.set_index('Model').loc['Random Forest', 'RMSE °C']:.3f}")
+    c1, c2 = st.columns([1, 1.3])
     with c1:
-        fig, ax = plt.subplots(figsize=(7.5, 4.2))
-        ax.plot(R["curve"].index, R["curve"]["Random Forest"], "o-", color="#2a9d8f", lw=2.5, label="Random Forest (bagging)")
-        ax.plot(R["curve"].index, R["curve"]["XGBoost"], "s-", color="#e76f51", lw=2.5, label="XGBoost (boosting)")
-        ax.set_xlabel("number of trees"); ax.set_ylabel("test ROC-AUC"); ax.set_title("Accuracy vs ensemble size")
-        ax.grid(alpha=.3); ax.legend(); fig.tight_layout(); show_fig(fig)
+        lo, hi = b[metric].min(), b[metric].max(); pad = max(0.005, (hi - lo) * 0.25)
+        show_fig(fig_barh(b.set_index("Model")[metric], colors=[FAM_COL[f] for f in b.Family], title=f"{metric} on the 365-day test year",
+                          xlabel=metric, xlim=(lo - pad, hi + pad / 2)))
+        st.caption("🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline")
+    with c2:
+        sel = st.multiselect("Compare forecasts", list(A["preds"]), default=["Naive (tomorrow = today)", top.Model] if top.Model in A["preds"] else ["Naive (tomorrow = today)"])
+        days = st.slider("Last N days of the test year", 30, 365, 90, 15)
+        df = pd.DataFrame({"Actual": A["y_te"].values, **{k: A["preds"][k] for k in sel}}, index=A["te"])
+        show_fig(fig_lines(df, ["Actual"] + sel, days))
+    st.dataframe(b.style.format({"MAE °C": "{:.4f}", "RMSE °C": "{:.4f}", "R²": "{:.3f}", "Train s": "{:.1f}", "Skill vs naive %": "{:+.1f}"})
+                 .background_gradient(subset=[metric], cmap="Greens_r" if asc else "Greens"), hide_index=True)
+    st.markdown("**Reading the arena:** a single tree over-fits; **bagging** averages many trees and cuts the error. **Boosting** adds small "
+                "trees one by one. **Stacking/voting** combine linear and tree models. Tomorrow's temperature is mostly linear in the "
+                "last few days, so Ridge is a strong baseline — ensembles win by adding non-linear weather effects.")
+
+elif page == PAGES[2]:
+    st.title("🌲 vs 🚀 Random Forest vs XGBoost")
+    A = train_arena()
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        cur = A["curve"]
+        fig, ax = plt.subplots(figsize=(7.5, 4.3))
+        ax.plot(cur.index, cur["Random Forest"], "o-", color="#2a9d8f", lw=2.5, label="Random Forest (bagging)")
+        ax.plot(cur.index, cur["XGBoost"], "s-", color="#e76f51", lw=2.5, label="XGBoost (boosting, lr = 0.03)")
+        ax.set_ylim(cur.min().min() * 0.98, min(cur.max().max(), cur.min().min() * 1.35))
+        ax.set_xlabel("number of trees"); ax.set_ylabel("test RMSE °C"); ax.set_title("Error vs ensemble size"); ax.grid(alpha=.3); ax.legend()
+        fig.tight_layout(); show_fig(fig)
     with c2:
         st.markdown("""**What this shows**
-* **RF (bagging)** climbs fast then **plateaus** — more trees only average more; they never over-fit.
-* **XGBoost (boosting)** climbs **faster** (each tree corrects the last), peaks, then can **over-fit** if it keeps adding trees — boosting needs early stopping.
-* Bagging fights **variance**, boosting fights **bias** — visible in one chart.""")
-
-    st.subheader("🎚️ Decision threshold explorer")
-    c1, c2 = st.columns([1, 1.2])
+* **Random Forest** reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
+* **XGBoost** starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — **boosting reduces bias**, and needs a tuned number of trees.""")
+    c1, c2 = st.columns([1.2, 1])
     with c1:
-        mdl = st.selectbox("Model", list(board.Model), index=0)
-        thr = st.slider("Call a customer 'will churn' if probability ≥", 0.05, 0.95, 0.40, 0.05)
-        mm = clf_metrics(R["yte"], R["probs"][mdl], thr)
-        st.write({k: round(v, 3) for k, v in mm.items()})
-        st.caption("Lowering the threshold catches more churners (recall ↑) but calls more loyal customers (precision ↓).")
+        cv = A["cv"]
+        fig, ax = plt.subplots(figsize=(7.5, 3.8))
+        ax.plot(range(1, len(cv) + 1), cv["Random Forest"], "o-", color="#2a9d8f", label="Random Forest")
+        ax.plot(range(1, len(cv) + 1), cv["XGBoost"], "s-", color="#e76f51", label="XGBoost")
+        ax.set_xlabel("time-series CV fold (each tests on the next unseen year)"); ax.set_ylabel("RMSE °C"); ax.grid(alpha=.3); ax.legend()
+        fig.tight_layout(); show_fig(fig)
     with c2:
-        cm = confusion_matrix(R["yte"], (R["probs"][mdl] >= thr).astype(int))
-        fig, ax = plt.subplots(figsize=(4.5, 3.6)); ax.imshow(cm, cmap="Oranges")
-        for (i, j), v in np.ndenumerate(cm):
-            ax.text(j, i, f"{v:,}", ha="center", va="center", fontsize=13)
-        ax.set_xticks([0, 1], ["Stay", "Churn"]); ax.set_yticks([0, 1], ["Stay", "Churn"])
-        ax.set_xlabel("Predicted"); ax.set_ylabel("Actual"); ax.set_title(f"{mdl} @ {thr:.2f}"); fig.tight_layout(); show_fig(fig)
-
-    st.subheader("🔍 What drives churn? (RF impurity importance vs XGBoost gain importance)")
-    imp = pd.DataFrame({"Random Forest": R["models"]["Random Forest"].feature_importances_,
-                        "XGBoost": R["models"]["XGBoost"].feature_importances_}, index=R["feats"])
-    imp = imp / imp.sum()
-    imp = imp.loc[imp.mean(axis=1).sort_values(ascending=False).index[:12]]
+        m1, m2 = st.columns(2)
+        m1.metric("RF mean CV RMSE", f"{cv['Random Forest'].mean():.3f} °C")
+        m2.metric("XGB mean CV RMSE", f"{cv['XGBoost'].mean():.3f} °C")
+        st.caption("Each fold trains on all earlier years and tests on the following year — no future data leaks into training. "
+                   "The notebook adds a corrected t-test of the difference.")
+    st.subheader("What drives tomorrow's temperature? (built-in importance)")
+    imp = A["imp"].loc[A["imp"].mean(axis=1).sort_values(ascending=False).index[:12]]
     st.bar_chart(imp)
 
-# ---------------------------------------------------------------- PREDICTOR & OPTIMIZER
-elif page == PAGES[2]:
-    st.title("🎯 Churn Predictor & 💰 Retention Budget Optimizer")
-    R = train_churn()
-    tab1, tab2 = st.tabs(["👤 Single customer what-if", "💰 Retention budget optimizer"])
-    with tab1:
-        c1, c2, c3 = st.columns(3)
-        district = c1.selectbox("District", sorted(churn_df.district.unique()), index=sorted(churn_df.district.unique()).index("Kurunegala"))
-        prov = churn_df.loc[churn_df.district == district, "province"].iloc[0]
-        area = c1.radio("Area", ["Urban", "Rural"], index=1, horizontal=True)
-        language = c1.selectbox("Language", ["Sinhala", "Tamil", "English"])
-        age = c1.slider("Age", 16, 78, 24)
-        gender = c1.radio("Gender", ["Male", "Female"], horizontal=True)
-        plan = c2.radio("Plan", ["Prepaid", "Postpaid"], horizontal=True)
-        tenure = c2.slider("Tenure (months)", 1, 144, 8)
-        spend = c2.number_input("Monthly spend (LKR)", 100, 15000, 900, 50)
-        data_gb = c2.slider("Data usage (GB / month)", 0.0, 80.0, 18.0, 0.5)
-        voice = c2.slider("Voice minutes / month", 0, 2000, 200, 10)
-        pay = c2.selectbox("Payment method", sorted(churn_df.payment_method.unique()))
-        netq = c3.slider("Network quality score (1–5)", 1.0, 5.0, 2.8, 0.1)
-        drop = c3.slider("Dropped-call rate %", 0.0, 15.0, 2.0, 0.1)
-        comp = c3.slider("Complaints in last 6 months", 0, 10, 2)
-        dual = c3.toggle("Uses a second SIM", True)
-        offer = c3.toggle("Received a competitor offer", True)
-        fibre = c3.toggle("Has home fibre / TV bundle", False)
-        pts = c3.toggle("Uses loyalty points", False)
-        days_reload = c3.slider("Days since last reload", 0, 60, 14) if plan == "Prepaid" else 0
-        late = c3.slider("Late bill payments", 0, 6, 0) if plan == "Postpaid" else 0
-        contract = c3.slider("Contract months left", 0, 24, 6) if plan == "Postpaid" else 0
-        row = pd.DataFrame([{"district": district, "province": prov, "area_type": area, "language": language, "age": age,
-                             "gender": gender, "plan_type": plan, "tenure_months": tenure, "monthly_spend_lkr": spend,
-                             "data_usage_gb": data_gb, "voice_minutes": voice, "network_quality_score": netq,
-                             "dropped_call_rate_pct": drop, "complaints_6m": comp, "dual_sim": int(dual),
-                             "has_fibre_bundle": int(fibre), "competitor_offer_received": int(offer),
-                             "days_since_last_reload": days_reload, "late_bill_payments": late,
-                             "contract_months_left": contract, "payment_method": pay, "uses_loyalty_points": int(pts)}])
-        x = R["pre"].transform(row[CAT_C + NUM_C])
-        show = ["Random Forest", "Extra Trees", "XGBoost", "LightGBM", "Gradient Boosting", "Stacking (RF+XGB+LGBM+LR)"]
-        ps = pd.Series({n: R["models"][n].predict_proba(x)[0, 1] for n in show})
-        p_main = ps["Stacking (RF+XGB+LGBM+LR)"]
-        risk = "🔴 HIGH" if p_main >= .5 else ("🟠 MEDIUM" if p_main >= .25 else "🟢 LOW")
-        st.divider()
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Stacking ensemble churn probability", f"{p_main:.1%}")
-        k2.metric("Risk level", risk)
-        k3.metric("12-month revenue at risk", f"LKR {p_main * spend * 12:,.0f}")
-        show_fig(fig_bar(ps.sort_values(ascending=False), title="Each ensemble's opinion (churn probability)"))
-        tips = []
-        if offer and dual: tips.append("Dual-SIM + competitor offer is the strongest churn trigger → send a matching data offer today.")
-        if netq < 3: tips.append("Poor network quality → check the nearest tower; offer Wi-Fi calling / bonus data as compensation.")
-        if comp >= 2: tips.append("Repeated complaints → priority callback from the customer-care team.")
-        if not fibre: tips.append("No home bundle → bundles strongly reduce churn; cross-sell fibre / PEO-TV style package.")
-        if plan == "Prepaid" and days_reload > 20: tips.append("Long reload gap → send a reload-bonus reminder via SMS / eZ Cash.")
-        if tips:
-            st.markdown("**Suggested retention actions**\n" + "\n".join(f"- {t}" for t in tips))
-    with tab2:
-        st.markdown("Rank customers by **expected LKR saved** = P(churn) × 12-month value × offer success − offer cost, "
-                    "then target until the budget runs out. Evaluated on 1,600 test customers with their **true** outcomes.")
-        c1, c2, c3, c4 = st.columns(4)
-        budget = c1.number_input("Budget (LKR)", 50_000, 2_000_000, 300_000, 50_000)
-        cost = c2.number_input("Cost per offer (LKR)", 100, 5_000, 500, 50)
-        succ = c3.slider("Offer success rate", 0.05, 0.9, 0.35, 0.05)
-        model_name = c4.selectbox("Probability model", list(R["board"].Model), index=list(R["board"].Model).index("Stacking (RF+XGB+LGBM+LR)"))
-        d = R["test_df"].copy(); d["p_churn"] = R["probs"][model_name]; d["value_12m"] = d.monthly_spend_lkr * 12
-        d["expected_saving"] = d.p_churn * d.value_12m * succ - cost
-        k = int(budget // cost)
-
-        def outcome(dd):
-            t = dd.head(k); saved = (t.churn * t.value_12m * succ).sum()
-            return {"Customers targeted": len(t), "True churners reached": int(t.churn.sum()),
-                    "Revenue saved (LKR)": saved, "Net ROI (LKR)": saved - len(t) * cost}
-        res = pd.DataFrame({"Random targeting": outcome(d.sample(frac=1, random_state=SEED)),
-                            "Highest churn probability": outcome(d.sort_values("p_churn", ascending=False)),
-                            "💡 Value-aware optimizer": outcome(d.sort_values("expected_saving", ascending=False))}).T
-        k1, k2 = st.columns(2)
-        k1.metric("Optimizer net ROI", f"LKR {res.iloc[2]['Net ROI (LKR)']:,.0f}",
-                  f"{res.iloc[2]['Net ROI (LKR)'] - res.iloc[0]['Net ROI (LKR)']:+,.0f} vs random")
-        k2.metric("Churners reached by optimizer", int(res.iloc[2]["True churners reached"]),
-                  f"{int(res.iloc[2]['True churners reached'] - res.iloc[0]['True churners reached']):+d} vs random")
-        st.dataframe(res.style.format({"Customers targeted": "{:,.0f}", "True churners reached": "{:,.0f}",
-                                       "Revenue saved (LKR)": "{:,.0f}", "Net ROI (LKR)": "{:,.0f}"}))
-        st.markdown("**Call list (top 25)**")
-        st.dataframe(d.sort_values("expected_saving", ascending=False).head(25)[
-            ["customer_id", "district", "plan_type", "monthly_spend_lkr", "p_churn", "expected_saving"]]
-            .style.format({"p_churn": "{:.1%}", "expected_saving": "LKR {:,.0f}", "monthly_spend_lkr": "{:,.0f}"}),
-            hide_index=True)
-
-# ---------------------------------------------------------------- VEHICLES
 elif page == PAGES[3]:
-    st.title("🚗 ikman Deal Checker — Hybrid Random Forest + Neural Network")
-    V = train_vehicle()
-    best = V["board"].index[0]
-    k1, k2, k3 = st.columns(3)
-    k1.metric("🏆 Best model", best)
-    k2.metric("Mean abs. error", f"LKR {V['board'].iloc[0]['MAE (LKR mn)']:.2f} mn")
-    k3.metric("MAPE", f"{V['board'].iloc[0]['MAPE %']:.1f}%")
-    tab1, tab2 = st.tabs(["🔎 Check a listing", "📊 Model comparison"])
-    with tab1:
-        c1, c2, c3 = st.columns(3)
-        models = veh_df.groupby("model").size().sort_values(ascending=False).index.tolist()
-        model = c1.selectbox("Model", models, index=0)
-        info = veh_df[veh_df.model == model].iloc[0]
-        c1.caption(f"{info.brand} · {info.fuel_type} · {info.engine_cc} cc · {info.body_type}")
-        yrs = veh_df[veh_df.model == model].year_of_manufacture
-        yom = c1.slider("Year of manufacture", int(yrs.min()), 2024, int(yrs.median()))
-        km = c2.number_input("Mileage (km)", 0, 400_000, int(max(5000, (2025 - yom) * 11500)), 1000)
-        cond = c2.radio("Condition", ["Used", "Recondition"], horizontal=True)
-        trans = c2.radio("Transmission", ["Automatic", "Manual"], horizontal=True)
-        owners = c2.slider("Previous owners", 0, 5, 0 if cond == "Recondition" else 1)
-        district = c3.selectbox("District", sorted(veh_df.district.unique()), index=sorted(veh_df.district.unique()).index("Colombo"))
-        seller = c3.radio("Seller", ["Owner", "Dealer"], horizontal=True)
-        lease = c3.toggle("On lease", False)
-        ask = c3.number_input("Asking price on ikman (LKR mn)", 0.5, 120.0, float(round(veh_df[veh_df.model == model].price_lkr_mn.median(), 1)), 0.1)
-        row = pd.DataFrame([{"brand": info.brand, "model": model, "fuel_type": info.fuel_type, "body_type": info.body_type,
-                             "transmission": trans, "condition": cond, "district": district, "seller_type": seller,
-                             "engine_cc": int(info.engine_cc), "year_of_manufacture": yom, "vehicle_age": 2025 - yom,
-                             "mileage_km": km, "previous_owners": owners, "on_lease": int(lease)}])
-        x = V["pre"].transform(row[CAT_V + NUM_V])
-        trees = np.exp([t.predict(x)[0] for t in V["rf"].estimators_])
-        point = float(np.exp(V["w"] * V["rf"].predict(x)[0] + (1 - V["w"]) * V["ann"].predict(x)[0]))
-        lo, hi = np.percentile(trees, [10, 90])
-        verdict = ("✅ GOOD DEAL — below the fair range" if ask < lo else
-                   ("⚠️ OVERPRICED — above the fair range" if ask > hi else "👍 FAIR PRICE — within the range"))
-        st.divider()
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Hybrid RF+ANN estimate", f"LKR {point:.2f} mn")
-        m2.metric("Fair range (P10–P90 of 300 trees)", f"{lo:.2f} – {hi:.2f} mn")
-        m3.metric("Asking vs estimate", f"LKR {ask:.2f} mn", f"{(ask - point) / point:+.1%}", delta_color="inverse")
-        (st.success if "GOOD" in verdict else st.warning if "OVER" in verdict else st.info)(verdict)
-        fig, ax = plt.subplots(figsize=(9, 2.8))
-        ax.hist(trees, bins=30, color="#2a9d8f", alpha=.8); ax.axvline(point, color="k", lw=2, label="Hybrid estimate")
-        ax.axvline(ask, color="#e76f51", lw=2, ls="--", label="Asking price"); ax.axvspan(lo, hi, color="#2a9d8f", alpha=.12, label="Fair range")
-        ax.set_xlabel("LKR mn"); ax.set_title("What each of the 300 Random-Forest trees thinks this car is worth"); ax.legend()
-        fig.tight_layout(); show_fig(fig)
-    with tab2:
-        st.dataframe(V["board"].style.format("{:.3f}").background_gradient(subset=["MAE (LKR mn)"], cmap="Greens_r"))
-        pick = st.selectbox("Actual vs predicted for", list(V["preds"]), index=list(V["preds"]).index(best))
-        sc = pd.DataFrame({"Actual (LKR mn)": np.exp(V["yte"]), "Predicted (LKR mn)": np.exp(V["preds"][pick])})
-        st.scatter_chart(sc, x="Actual (LKR mn)", y="Predicted (LKR mn)")
-        st.markdown(f"""**Why hybridise?** RF handles categories and thresholds (import-ban premium, old-hybrid battery risk) but
-predicts in *steps* and can't extrapolate. The ANN learns *smooth* depreciation but is weaker on rare models.
-Their errors are only partly correlated, so the blend (w_RF = {V['w']:.2f}, chosen on out-of-fold predictions) and stacking
-cancel part of each model's error.""")
-
-# ---------------------------------------------------------------- WEATHER
-elif page == PAGES[4]:
-    st.title("🌦️ Colombo Weather — Hybrid ARIMA + Random Forest")
-    W = train_weather()
-    st.caption(f"Data source: **{W['src']}** · {W['wx'].index.min().date()} → {W['wx'].index.max().date()}")
+    st.title("⭐ Hybrid ARIMA + Random Forest")
+    H = train_hybrid(); bd = H["board"]
+    ar_rmse, hy_rmse = bd.loc["ARIMA + Fourier", "RMSE °C"], bd.loc["★ Hybrid ARIMA + RF", "RMSE °C"]
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric(f"Forecast for {W['nxt'].date()}", f"{W['h_next']:.1f} °C", f"{W['h_next'] - W['a_next']:+.2f} °C RF correction")
-    k2.metric("ARIMA alone", f"{W['a_next']:.1f} °C")
-    k3.metric("Hybrid test RMSE", f"{W['board'].loc['Hybrid ARIMA + RF', 'RMSE °C']:.3f} °C")
-    k4.metric("ARIMA test RMSE", f"{W['board'].loc['ARIMA + Fourier', 'RMSE °C']:.3f} °C")
-    days = st.slider("Show last N test days", 30, 365, 120, 15)
-    cols = st.multiselect("Series", list(W["preds"].columns), default=["Actual", "ARIMA + Fourier", "Hybrid ARIMA + RF"])
-    styles = {"Actual": dict(color="black", lw=2.2), "Naive (yesterday)": dict(color="#adb5bd", lw=1.2, ls=":"),
-              "ARIMA + Fourier": dict(color="#4c72b0", lw=1.6, ls="--"),
-              "Random Forest (direct)": dict(color="#2a9d8f", lw=1.4), "Hybrid ARIMA + RF": dict(color="#e76f51", lw=2.0)}
-    fig, ax = plt.subplots(figsize=(13, 4.2))
-    for c in cols:
-        s_ = W["preds"][c].iloc[-days:]
-        ax.plot(s_.index, s_.values, label=c, **styles.get(c, {}))
-    ax.set_ylabel("°C (daily mean)"); ax.grid(alpha=.3)
-    ax.legend(ncol=max(1, len(cols)), loc="upper center", fontsize=9, frameon=False)
-    fig.autofmt_xdate(); fig.tight_layout(); show_fig(fig)
-    c1, c2 = st.columns([1, 1])
+    k1.metric("Hybrid RMSE", f"{hy_rmse:.3f} °C", f"{100 * (hy_rmse / ar_rmse - 1):+.1f}% vs ARIMA", delta_color="inverse")
+    k2.metric("ARIMA alone", f"{ar_rmse:.3f} °C")
+    k3.metric("Best ensemble (Part A)", f"{bd.drop(['★ Hybrid ARIMA + RF', 'ARIMA + Fourier', 'Naive (tomorrow = today)']).iloc[0]['RMSE °C']:.3f} °C")
+    k4.metric("Naive", f"{bd.loc['Naive (tomorrow = today)', 'RMSE °C']:.3f} °C")
+    days = st.slider("Show last N days", 30, 365, 120, 15)
+    cols = st.multiselect("Series", list(H["pred"].columns), default=["Actual", "ARIMA + Fourier", "★ Hybrid ARIMA + RF"])
+    show_fig(fig_lines(H["pred"], cols, days, "One-day-ahead forecasts on the test year"))
+    c1, c2 = st.columns(2)
     with c1:
-        st.dataframe(W["board"].style.format("{:.4f}").background_gradient(subset=["RMSE °C"], cmap="Greens_r"))
+        st.dataframe(bd.style.format("{:.4f}").background_gradient(subset=["RMSE °C"], cmap="Greens_r"))
         st.markdown(f"""**How the hybrid works**
-1. **ARIMA{W['order']}** + yearly Fourier terms → linear, autocorrelated part (trend + season).
-2. **Random Forest** learns ARIMA's **residuals** from lagged rain, wind, solar radiation and monsoon flags.
-3. Forecast = ARIMA + RF correction. All inputs use data up to *yesterday* only.""")
+1. **ARIMA{ORDER}** + yearly Fourier terms → the linear part (persistence, season, trend).
+2. **Random Forest** learns ARIMA's **errors** from yesterday's rain, wind, solar radiation and monsoon flags.
+3. Forecast = ARIMA + RF correction. Only information up to the previous day is used.""")
     with c2:
-        show_fig(fig_bar(W["imp"][:12], title="What the RF learned about ARIMA's errors"))
-    with st.expander("Monthly climate of Colombo (from the data)"):
-        mon = W["wx"].groupby(W["wx"].index.month).agg(temp=("temperature_2m_mean", "mean"), rain=("precipitation_sum", "sum"))
-        mon["rain"] = mon["rain"] / W["wx"].index.year.nunique()
-        mon.index = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        c1, c2 = st.columns(2)
-        c1.bar_chart(mon["rain"], y_label="avg rain per month (mm)")
-        fig, ax = plt.subplots(figsize=(6, 3.2))
-        ax.plot(mon.index, mon["temp"], "o-", color="#e76f51"); ax.set_ylabel("mean temp °C"); ax.grid(alpha=.3)
-        fig.tight_layout()
-        with c2:
-            show_fig(fig)
+        show_fig(fig_barh(H["imp"][:12], title="What the forest learned about ARIMA's errors"))
+    st.subheader("💡 Which model wins in which monsoon season? (RMSE °C)")
+    st.dataframe(H["seas"].style.format("{:.3f}").highlight_min(axis=1, color="#c7f0d8"))
 
-# ---------------------------------------------------------------- ABOUT
+elif page == PAGES[4]:
+    st.title("🧠 Hybrid Random Forest + Neural Network")
+    N = train_rf_ann(); bd = N["board"]
+    k1, k2, k3 = st.columns(3)
+    k1.metric("🏆 Best", bd.index[0]); k2.metric("RMSE", f"{bd.iloc[0]['RMSE °C']:.3f} °C"); k3.metric("RF–ANN error correlation", f"{N['corr']:.2f}")
+    st.dataframe(bd.style.format("{:.4f}").background_gradient(subset=["RMSE °C"], cmap="Greens_r"))
+    pick = st.multiselect("Compare", list(N["preds"]), default=[bd.index[0], "ANN (MLP)"])
+    df = pd.DataFrame({"Actual": N["y_te"].values, **{k: N["preds"][k] for k in pick}}, index=N["te"])
+    show_fig(fig_lines(df, ["Actual"] + pick, 90, "Last 90 test days"))
+    st.markdown("**Why combine them?** The forest captures thresholds (heavy rain, monsoon) but predicts in steps; the network learns smooth "
+                "relations. Blending/stacking cancel part of each model's error — the less correlated their errors, the bigger the gain.")
+
+elif page == PAGES[5]:
+    st.title("💡 Tomorrow in Colombo")
+    L = train_live(); H = train_hybrid(); A = train_arena()
+    wx = L["wx"]; last = wx.index[-1]
+    st.caption(f"Data source: **{L['src']}** · last observed day: **{last.date()}** (the archive lags ~5 days)")
+    with st.expander("🌧️ What-if: change the last day's weather", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        clip = lambda v, a, b: float(min(b, max(a, round(float(v), 1))))   # keep each slider's default inside its range
+        d_rain = clip(wx['precipitation_sum'].iloc[-1], 0.0, 150.0)
+        d_rad = clip(wx['shortwave_radiation_sum'].iloc[-1], 2.0, 30.0)
+        d_wind = clip(wx['wind_speed_10m_max'].iloc[-1], 3.0, 60.0)
+        rain = c1.slider("Rainfall (mm)", 0.0, 150.0, d_rain, 0.5)
+        rad = c2.slider("Solar radiation (MJ/m²) — low = cloudy", 2.0, 30.0, d_rad, 0.5)
+        wind = c3.slider("Max wind (km/h)", 3.0, 60.0, d_wind, 0.5)
+    fr, fx = next_day_rows(wx, L["resid"], rain, rad, wind)
+    fr0, fx0 = next_day_rows(wx, L["resid"], d_rain, d_rad, d_wind)
+    hyb = L["a_next"] + float(L["rf"].predict(fr)[0]); hyb0 = L["a_next"] + float(L["rf"].predict(fr0)[0])
+    lo, hi = hyb + H["q"][0], hyb + H["q"][1]
+    k1, k2, k3 = st.columns(3)
+    k1.metric(f"Forecast for {L['nxt'].date()} (hybrid)", f"{hyb:.1f} °C", f"{hyb - hyb0:+.2f} °C from your what-if" if abs(hyb - hyb0) > 0.005 else None)
+    k2.metric("80% range (from last year's errors)", f"{lo:.1f} – {hi:.1f} °C")
+    k3.metric("🔥 Heat alert (≥ 28.5 °C)", "YES" if lo >= HEAT_C else ("possible" if hi >= HEAT_C else "no"))
+    others = {nm: float(A["models"][nm].predict(fx)[0]) for nm in ["Random Forest", "XGBoost", "LightGBM", "Stacking (RF+XGB+LGBM+Ridge)"]}
+    others["★ Hybrid ARIMA + RF"] = hyb
+    s_ = pd.Series(others).sort_values()
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        show_fig(fig_barh(s_, title="Each model's forecast for tomorrow (°C)", xlim=(s_.min() - 0.6, s_.max() + 0.4)))
+    with c2:
+        fig, ax = plt.subplots(figsize=(6, 3.6))
+        recent = wx["temperature_2m_mean"].iloc[-30:]
+        ax.plot(recent.index, recent.values, "o-", color="black", ms=3, label="observed")
+        ax.errorbar([L["nxt"]], [hyb], yerr=[[hyb - lo], [hi - hyb]], fmt="o", color="#e76f51", capsize=6, label="forecast + 80% range")
+        ax.set_title("Last 30 days and tomorrow"); ax.grid(alpha=.3); ax.legend(fontsize=8); fig.autofmt_xdate(); fig.tight_layout(); show_fig(fig)
+    st.caption("Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — "
+               "the non-linear weather effect that ARIMA alone cannot see.")
+
 else:
-    st.title("ℹ️ Research notes & About")
+    st.title("ℹ️ Research & About")
     st.markdown("""
 ### Random Forest vs gradient boosting
 | | Random Forest | XGBoost | LightGBM | CatBoost |
@@ -604,15 +496,16 @@ else:
 | Trees built | independent, deep, bootstrap | sequential, depth-wise, regularised | sequential, leaf-wise, histograms | sequential, symmetric trees, ordered boosting |
 | Mainly reduces | variance | bias | bias | bias |
 | Tuning | minimal | moderate | moderate | minimal |
-| Categoricals | need encoding | need encoding | native | native (best) |
 | Over-fit risk | low | medium | medium–high on small data | low |
+
+**Time series:** trees cannot extrapolate a trend or unseen temperatures — that is why the **ARIMA + RF hybrid** lets ARIMA handle trend and season.
 
 ### Tabular vs image / text data
 * **Tabular:** tree ensembles remain state-of-the-art for medium tabular data — mixed types, thresholds, interactions, little preprocessing.
-* **Images / text:** signal lives in spatial/sequential structure → CNNs / Transformers dominate; ensembles are used on top of their embeddings or to average several networks.
+* **Images / text:** signal lives in spatial/sequential structure → CNNs / Transformers dominate; ensembles are used on their embeddings or to average networks.
 
-### Data honesty
-Colombo weather is **real** (Open-Meteo / ERA5). Telecom churn and vehicle listings are **synthetic, Sri Lankan-context** datasets generated by the student (`data/generate_datasets.py`).
+### Data
+One real dataset: Colombo daily weather 2015–2026 from the Open-Meteo historical archive (ERA5 reanalysis), saved in `data/colombo_weather_daily_used.csv`.
 
 ### Generative AI declaration
 The dashboard UI and parts of the code were **generated with Claude (Anthropic)**, then reviewed, run and tested by the student.
