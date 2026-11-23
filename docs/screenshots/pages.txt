@@ -1,21 +1,23 @@
 ===== 01_home | problem=False
 Skip to main content
 keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -23,65 +25,64 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab — Colombo weather
 
-One dashboard, three Sri Lankan problems, every major ensemble idea: Bagging, Boosting, Stacking and hybrid models.
+Can ensemble learning forecast tomorrow's temperature in Colombo? One real dataset, every major ensemble idea: Bagging, Boosting, Stacking and hybrid models.
 
-📱 Telecom churn
-8,000 mobile customers in 25 districts. Most carry two SIMs — one competitor offer and they're gone.
+Days of real data
 
-Which ensemble catches them first?
-BaggingBoosting Stacking
-🚗 ikman.lk car prices
-6,000 used-vehicle listings — Aqua, Vitz, Wagon R, Vezel, Prado… in LKR.
+4,322
 
-Is that asking price fair?
-Hybrid RF + ANN
-🌦️ Colombo weather
-10+ years of daily Colombo weather, monsoons included.
+Period
 
-What will tomorrow's temperature be?
-Hybrid ARIMA + RF
-How the three ensemble families work
+2015 – 2026
+
+Mean temperature
+
+26.7 °C
+
+Average yearly rain
+
+2,820 mm
+
+How the ensemble families work
 
 Bagging 🌳🌳🌳 → average
 
-Many deep trees trained in parallel on bootstrap samples. Averaging cancels their individual mistakes → reduces variance. Random Forest, Extra Trees.
+Many deep trees trained in parallel on bootstrap samples; averaging cancels their mistakes → reduces variance. Random Forest, Extra Trees.
 
 Boosting 🌱→🌿→🌳 sequential
 
-Shallow trees built one after another, each fixing the errors of the previous ones → reduces bias. AdaBoost, Gradient Boosting, XGBoost, LightGBM.
+Small trees built one after another, each fixing the previous errors → reduces bias. XGBoost, LightGBM, Gradient Boosting, AdaBoost.
 
-Stacking 🧠 meta-learner
+Stacking & hybrids 🧠
 
-Different model types (RF, XGB, LGBM, LR) make predictions; a meta-model learns how much to trust each one. Stacking, soft voting.
+Different models combined: a meta-model learns whom to trust, or ARIMA + Random Forest split the work (linear season vs non-linear weather).
 
-💡 Innovation — from predictions to decisions
-Retention Budget Optimizer: turns churn probabilities into LKR saved and picks whom to call within a budget.
-ikman Deal Checker: uses the spread of 300 Random-Forest trees to give a fair-price range, not just one number.
-Tomorrow's Colombo forecast: ARIMA handles trend & season, RF learns the monsoon-driven non-linear errors.
-keyboard_arrow_right
+💡 Innovation: errors by monsoon season, and a live Tomorrow in Colombo forecast with an 80% range, a heat alert and a rain what-if.
 
-⚠️ Data honesty statement
+Data: real daily weather for Colombo (6.93°N, 79.86°E) from the Open-Meteo historical archive (ERA5 reanalysis). Target: tomorrow's daily mean temperature, using only information up to today. Test set: the last 365 days (Nov 2025 – Oct 2026).
 
 ===== 02_arena | problem=False
 Skip to main content
 keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -89,9 +90,9 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-⚔️ Ensemble Arena — who predicts churn best?
+⚔️ Ensemble Arena — who forecasts tomorrow best?
 
-Show ensemble families
+Show families
 
 Baseline
 Bagging
@@ -102,96 +103,57 @@ Rank by
 
 🏆 Best model
 
-Stacking (RF+XGB+LGBM+LR)
+Stacking (RF+XGB+LGBM+Ridge)
 
-Best ROC-AUC
+Best RMSE °C
 
-0.7846
+0.583
 
-Best bagging AUC
+Skill vs naive
 
-0.7791
++8.7%
 
-Best boosting AUC
+Bagging effect (tree → RF)
 
-0.7835
+0.662 → 0.593
 
 🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline
 
-ROC curves for
+Compare forecasts
 
-Stacking (RF+XGB+LGBM+LR)
-Soft Voting (RF+XGB+LGBM+LR)
-AdaBoost
-Gradient Boosting
-🌲 vs 🚀 Random Forest vs XGBoost — how does accuracy grow with more trees?
+Naive (tomorrow = today)
+Stacking (RF+XGB+LGBM+Ridge)
 
-What this shows
+Last N days of the test year
 
-RF (bagging) climbs fast then plateaus — more trees only average more; they never over-fit.
-XGBoost (boosting) climbs faster (each tree corrects the last), peaks, then can over-fit if it keeps adding trees — boosting needs early stopping.
-Bagging fights variance, boosting fights bias — visible in one chart.
-🎚️ Decision threshold explorer
+90
 
-Model
+30
 
-Call a customer 'will churn' if probability ≥
+365
 
-0.40
+Reading the arena: a single tree over-fits; bagging averages many trees and cuts the error. Boosting adds small trees one by one. Stacking/voting combine linear and tree models. Tomorrow's temperature is mostly linear in the last few days, so Ridge is a strong baseline — ensembles win by adding non-linear weather effects.
 
-0.05
-
-0.95
-
-{
-"Accuracy":0.795
-"Precision":0.601
-"Recall":0.432
-"F1":0.503
-"ROC-AUC":0.785
-"PR-AUC":0.569
-}
-
-Lowering the threshold catches more churners (recall ↑) but calls more loyal customers (precision ↓).
-
-🔍 What drives churn? (RF impurity importance vs XGBoost gain importance)
-age
-competitor_offer…
-complaints_6m
-contract_month…
-data_usage_gb
-days_since_last…
-dropped_call_rat…
-dual_sim
-monthly_spend_…
-network_quality…
-tenure_months
-voice_minutes
-0.00
-0.10
-0.05
-0.15
-Random Forest
-XGBoost
-
-===== 03_arena_trees | problem=False
+===== 03_rf_xgb | problem=False
 Skip to main content
 keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -199,109 +161,63 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-⚔️ Ensemble Arena — who predicts churn best?
-
-Show ensemble families
-
-Baseline
-Bagging
-Boosting
-Stacking
-
-Rank by
-
-🏆 Best model
-
-Stacking (RF+XGB+LGBM+LR)
-
-Best ROC-AUC
-
-0.7846
-
-Best bagging AUC
-
-0.7791
-
-Best boosting AUC
-
-0.7835
-
-🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline
-
-ROC curves for
-
-Stacking (RF+XGB+LGBM+LR)
-Soft Voting (RF+XGB+LGBM+LR)
-AdaBoost
-Gradient Boosting
-🌲 vs 🚀 Random Forest vs XGBoost — how does accuracy grow with more trees?
+🌲 vs 🚀 Random Forest vs XGBoost
 
 What this shows
 
-RF (bagging) climbs fast then plateaus — more trees only average more; they never over-fit.
-XGBoost (boosting) climbs faster (each tree corrects the last), peaks, then can over-fit if it keeps adding trees — boosting needs early stopping.
-Bagging fights variance, boosting fights bias — visible in one chart.
-🎚️ Decision threshold explorer
+Random Forest reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
+XGBoost starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — boosting reduces bias, and needs a tuned number of trees.
 
-Model
+RF mean CV RMSE
 
-Call a customer 'will churn' if probability ≥
+0.512 °C
 
-0.40
+XGB mean CV RMSE
 
-0.05
+0.517 °C
 
-0.95
+Each fold trains on all earlier years and tests on the following year — no future data leaks into training. The notebook adds a corrected t-test of the difference.
 
-{
-"Accuracy":0.795
-"Precision":0.601
-"Recall":0.432
-"F1":0.503
-"ROC-AUC":0.785
-"PR-AUC":0.569
-}
-
-Lowering the threshold catches more churners (recall ↑) but calls more loyal customers (precision ↓).
-
-🔍 What drives churn? (RF impurity importance vs XGBoost gain importance)
-age
-competitor_offer…
-complaints_6m
-contract_month…
-data_usage_gb
-days_since_last…
-dropped_call_rat…
-dual_sim
-monthly_spend_…
-network_quality…
-tenure_months
-voice_minutes
-0.00
-0.10
-0.05
-0.15
+What drives tomorrow's temperature? (built-in importance)
+doy_cos
+doy_sin
+month
+rain_lag1
+sw_monsoon
+temp_lag1
+temp_lag2
+temp_lag3
+temp_lag4
+temp_roll30
+temp_roll7
+tmax_lag1
+0.0
+0.2
+0.4
+0.6
+0.8
 Random Forest
 XGBoost
 
-===== 04_arena_threshold | problem=False
+===== 04_rf_xgb_cv | problem=False
 Skip to main content
-keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -309,109 +225,66 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-⚔️ Ensemble Arena — who predicts churn best?
-
-Show ensemble families
-
-Baseline
-Bagging
-Boosting
-Stacking
-
-Rank by
-
-🏆 Best model
-
-Stacking (RF+XGB+LGBM+LR)
-
-Best ROC-AUC
-
-0.7846
-
-Best bagging AUC
-
-0.7791
-
-Best boosting AUC
-
-0.7835
-
-🟩 Bagging · 🟧 Boosting · 🟪 Stacking · ⬜ Baseline
-
-ROC curves for
-
-Stacking (RF+XGB+LGBM+LR)
-Soft Voting (RF+XGB+LGBM+LR)
-AdaBoost
-Gradient Boosting
-🌲 vs 🚀 Random Forest vs XGBoost — how does accuracy grow with more trees?
+🌲 vs 🚀 Random Forest vs XGBoost
 
 What this shows
 
-RF (bagging) climbs fast then plateaus — more trees only average more; they never over-fit.
-XGBoost (boosting) climbs faster (each tree corrects the last), peaks, then can over-fit if it keeps adding trees — boosting needs early stopping.
-Bagging fights variance, boosting fights bias — visible in one chart.
-🎚️ Decision threshold explorer
+Random Forest reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
+XGBoost starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — boosting reduces bias, and needs a tuned number of trees.
 
-Model
+RF mean CV RMSE
 
-Call a customer 'will churn' if probability ≥
+0.512 °C
 
-0.40
+XGB mean CV RMSE
 
-0.05
+0.517 °C
 
-0.95
+Each fold trains on all earlier years and tests on the following year — no future data leaks into training. The notebook adds a corrected t-test of the difference.
 
-{
-"Accuracy":0.795
-"Precision":0.601
-"Recall":0.432
-"F1":0.503
-"ROC-AUC":0.785
-"PR-AUC":0.569
-}
-
-Lowering the threshold catches more churners (recall ↑) but calls more loyal customers (precision ↓).
-
-🔍 What drives churn? (RF impurity importance vs XGBoost gain importance)
-age
-competitor_offer…
-complaints_6m
-contract_month…
-data_usage_gb
-days_since_last…
-dropped_call_rat…
-dual_sim
-monthly_spend_…
-network_quality…
-tenure_months
-voice_minutes
-0.00
-0.10
-0.05
-0.15
+What drives tomorrow's temperature? (built-in importance)
+doy_cos
+doy_sin
+month
+rain_lag1
+sw_monsoon
+temp_lag1
+temp_lag2
+temp_lag3
+temp_lag4
+temp_roll30
+temp_roll7
+tmax_lag1
+0.0
+0.2
+0.4
+0.6
+0.8
+−0.2
+1.0
 Random Forest
 XGBoost
 
-===== 05_predictor | problem=False
+===== 05_hybrid | problem=False
 Skip to main content
 keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -419,207 +292,328 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-🎯 Churn Predictor & 💰 Retention Budget Optimizer
+⭐ Hybrid ARIMA + Random Forest
 
-👤 Single customer what-if
+Hybrid RMSE
 
-💰 Retention budget optimizer
+0.572 °C
 
-District
+-3.9% vs ARIMA
 
-Area
+ARIMA alone
 
-Urban
+0.595 °C
 
-Rural
+Best ensemble (Part A)
 
-Language
+0.583 °C
 
-Age
+Naive
 
-24
+0.638 °C
 
-16
+Show last N days
 
-78
+120
 
-Gender
+30
 
-Male
+365
 
-Female
+Series
 
-Plan
+Actual
+ARIMA + Fourier
+★ Hybrid ARIMA + RF
 
-Prepaid
+How the hybrid works
 
-Postpaid
+ARIMA(2, 0, 2) + yearly Fourier terms → the linear part (persistence, season, trend).
+Random Forest learns ARIMA's errors from yesterday's rain, wind, solar radiation and monsoon flags.
+Forecast = ARIMA + RF correction. Only information up to the previous day is used.
+💡 Which model wins in which monsoon season? (RMSE °C)
 
-Tenure (months)
+===== 06_hybrid_seasons | problem=False
+Skip to main content
+keyboard_double_arrow_left
+🌦️ LankaEnsemble Lab
 
-8
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
-1
+Navigate
 
-144
+🏠 Home & Story
 
-Monthly spend (LKR)
+⚔️ Ensemble Arena
 
-Data usage (GB / month)
+🌲 RF vs XGBoost
 
-18.00
+★ Hybrid ARIMA + RF
+
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
+
+ℹ️ Research & About
+
+B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
+
+🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
+
+⭐ Hybrid ARIMA + Random Forest
+
+Hybrid RMSE
+
+0.572 °C
+
+-3.9% vs ARIMA
+
+ARIMA alone
+
+0.595 °C
+
+Best ensemble (Part A)
+
+0.583 °C
+
+Naive
+
+0.638 °C
+
+Show last N days
+
+120
+
+30
+
+365
+
+Series
+
+Actual
+ARIMA + Fourier
+★ Hybrid ARIMA + RF
+
+How the hybrid works
+
+ARIMA(2, 0, 2) + yearly Fourier terms → the linear part (persistence, season, trend).
+Random Forest learns ARIMA's errors from yesterday's rain, wind, solar radiation and monsoon flags.
+Forecast = ARIMA + RF correction. Only information up to the previous day is used.
+💡 Which model wins in which monsoon season? (RMSE °C)
+
+===== 07_rf_ann | problem=False
+Skip to main content
+keyboard_double_arrow_left
+🌦️ LankaEnsemble Lab
+
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
+
+Navigate
+
+🏠 Home & Story
+
+⚔️ Ensemble Arena
+
+🌲 RF vs XGBoost
+
+★ Hybrid ARIMA + RF
+
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
+
+ℹ️ Research & About
+
+B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
+
+🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
+
+🧠 Hybrid Random Forest + Neural Network
+
+🏆 Best
+
+Hybrid: Stacking → Ridge
+
+RMSE
+
+0.582 °C
+
+RF–ANN error correlation
+
+0.93
+
+Compare
+
+Hybrid: Stacking → Ridge
+ANN (MLP)
+
+Why combine them? The forest captures thresholds (heavy rain, monsoon) but predicts in steps; the network learns smooth relations. Blending/stacking cancel part of each model's error — the less correlated their errors, the bigger the gain.
+
+===== 08_tomorrow | problem=False
+Skip to main content
+keyboard_double_arrow_left
+🌦️ LankaEnsemble Lab
+
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
+
+Navigate
+
+🏠 Home & Story
+
+⚔️ Ensemble Arena
+
+🌲 RF vs XGBoost
+
+★ Hybrid ARIMA + RF
+
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
+
+ℹ️ Research & About
+
+B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
+
+🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
+
+💡 Tomorrow in Colombo
+
+Data source: REAL · Open-Meteo archive (ERA5) — downloaded live · last observed day: 2026-11-17 (the archive lags ~5 days)
+
+keyboard_arrow_down
+
+🌧️ What-if: change the last day's weather
+
+Rainfall (mm)
+
+1.40
 
 0.00
 
-80.00
+150.00
 
-Voice minutes / month
+Solar radiation (MJ/m²) — low = cloudy
 
-200
-
-0
-
-2000
-
-Payment method
-
-Network quality score (1–5)
-
-2.80
-
-1.00
-
-5.00
-
-Dropped-call rate %
+20.40
 
 2.00
 
+30.00
+
+Max wind (km/h)
+
+11.70
+
+3.00
+
+60.00
+
+Forecast for 2026-11-18 (hybrid)
+
+27.2 °C
+
+80% range (from last year's errors)
+
+26.5 – 27.9 °C
+
+🔥 Heat alert (≥ 28.5 °C)
+
+no
+
+Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — the non-linear weather effect that ARIMA alone cannot see.
+
+===== 09_tomorrow_chart | problem=False
+Skip to main content
+🌦️ LankaEnsemble Lab
+
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
+
+Navigate
+
+🏠 Home & Story
+
+⚔️ Ensemble Arena
+
+🌲 RF vs XGBoost
+
+★ Hybrid ARIMA + RF
+
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
+
+ℹ️ Research & About
+
+B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
+
+🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
+
+💡 Tomorrow in Colombo
+
+Data source: REAL · Open-Meteo archive (ERA5) — downloaded live · last observed day: 2026-11-17 (the archive lags ~5 days)
+
+keyboard_arrow_down
+
+🌧️ What-if: change the last day's weather
+
+Rainfall (mm)
+
+1.40
+
 0.00
 
-15.00
+150.00
 
-Complaints in last 6 months
+Solar radiation (MJ/m²) — low = cloudy
 
-2
+20.40
 
-0
+2.00
 
-10
+30.00
 
-Uses a second SIM
+Max wind (km/h)
 
-Received a competitor offer
+11.70
 
-Has home fibre / TV bundle
+3.00
 
-Uses loyalty points
+60.00
 
-Days since last reload
+Forecast for 2026-11-18 (hybrid)
 
-14
+27.2 °C
 
-0
+80% range (from last year's errors)
 
-60
+26.5 – 27.9 °C
 
-Stacking ensemble churn probability
+🔥 Heat alert (≥ 28.5 °C)
 
-83.7%
+no
 
-Risk level
+Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — the non-linear weather effect that ARIMA alone cannot see.
 
-🔴 HIGH
-
-12-month revenue at risk
-
-LKR 9,039
-
-Suggested retention actions
-
-Dual-SIM + competitor offer is the strongest churn trigger → send a matching data offer today.
-Poor network quality → check the nearest tower; offer Wi-Fi calling / bonus data as compensation.
-Repeated complaints → priority callback from the customer-care team.
-No home bundle → bundles strongly reduce churn; cross-sell fibre / PEO-TV style package.
-
-===== 06_optimizer | problem=False
-Skip to main content
-🇱🇰 LankaEnsemble Lab
-
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
-
-Navigate
-
-🏠 Home & Story
-
-⚔️ Ensemble Arena (Churn)
-
-🎯 Churn Predictor & Retention Optimizer
-
-🚗 ikman Deal Checker (RF + ANN)
-
-🌦️ Colombo Weather (ARIMA + RF)
-
-ℹ️ Research & About
-
-B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
-
-🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
-
-🎯 Churn Predictor & 💰 Retention Budget Optimizer
-
-👤 Single customer what-if
-
-💰 Retention budget optimizer
-
-Rank customers by expected LKR saved = P(churn) × 12-month value × offer success − offer cost, then target until the budget runs out. Evaluated on 1,600 test customers with their true outcomes.
-
-Budget (LKR)
-
-Cost per offer (LKR)
-
-Offer success rate
-
-0.35
-
-0.05
-
-0.90
-
-Probability model
-
-Optimizer net ROI
-
-LKR 1,241,148
-
-+739,158 vs random
-
-Churners reached by optimizer
-
-218
-
-+67 vs random
-
-Call list (top 25)
-
-===== 07_deal | problem=False
+===== 10_about | problem=False
 Skip to main content
 keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
+🌦️ LankaEnsemble Lab
 
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
+Ensemble learning on real Colombo weather (Open-Meteo ERA5, 2015–2026)
 
 Navigate
 
 🏠 Home & Story
 
-⚔️ Ensemble Arena (Churn)
+⚔️ Ensemble Arena
 
-🎯 Churn Predictor & Retention Optimizer
+🌲 RF vs XGBoost
 
-🚗 ikman Deal Checker (RF + ANN)
+★ Hybrid ARIMA + RF
 
-🌦️ Colombo Weather (ARIMA + RF)
+🧠 Hybrid RF + ANN
+
+💡 Tomorrow in Colombo
 
 ℹ️ Research & About
 
@@ -627,373 +621,22 @@ B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
 
 🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
 
-🚗 ikman Deal Checker — Hybrid Random Forest + Neural Network
-
-🏆 Best model
-
-Hybrid: Blend (w_RF=0.61)
-
-Mean abs. error
-
-LKR 0.60 mn
-
-MAPE
-
-6.2%
-
-🔎 Check a listing
-
-📊 Model comparison
-
-Model
-
-Toyota · Hybrid · 1500 cc · Hatchback
-
-Year of manufacture
-
-2014
-
-2012
-
-2024
-
-Mileage (km)
-
-Condition
-
-Used
-
-Recondition
-
-Transmission
-
-Automatic
-
-Manual
-
-Previous owners
-
-1
-
-0
-
-5
-
-District
-
-Seller
-
-Owner
-
-Dealer
-
-On lease
-
-Asking price on ikman (LKR mn)
-
-Hybrid RF+ANN estimate
-
-LKR 7.45 mn
-
-Fair range (P10–P90 of 300 trees)
-
-6.49 – 7.61 mn
-
-Asking vs estimate
-
-LKR 7.50 mn
-
-+0.6%
-
-👍
-
-FAIR PRICE — within the range
-
-===== 08_deal_hist | problem=False
-Skip to main content
-🇱🇰 LankaEnsemble Lab
-
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
-
-Navigate
-
-🏠 Home & Story
-
-⚔️ Ensemble Arena (Churn)
-
-🎯 Churn Predictor & Retention Optimizer
-
-🚗 ikman Deal Checker (RF + ANN)
-
-🌦️ Colombo Weather (ARIMA + RF)
-
 ℹ️ Research & About
-
-B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
-
-🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
-
-🚗 ikman Deal Checker — Hybrid Random Forest + Neural Network
-
-🏆 Best model
-
-Hybrid: Blend (w_RF=0.61)
-
-Mean abs. error
-
-LKR 0.60 mn
-
-MAPE
-
-6.2%
-
-🔎 Check a listing
-
-📊 Model comparison
-
-Model
-
-Toyota · Hybrid · 1500 cc · Hatchback
-
-Year of manufacture
-
-2014
-
-2012
-
-2024
-
-Mileage (km)
-
-Condition
-
-Used
-
-Recondition
-
-Transmission
-
-Automatic
-
-Manual
-
-Previous owners
-
-1
-
-0
-
-5
-
-District
-
-Seller
-
-Owner
-
-Dealer
-
-On lease
-
-Asking price on ikman (LKR mn)
-
-Hybrid RF+ANN estimate
-
-LKR 7.45 mn
-
-Fair range (P10–P90 of 300 trees)
-
-6.49 – 7.61 mn
-
-Asking vs estimate
-
-LKR 7.50 mn
-
-+0.6%
-
-👍
-
-FAIR PRICE — within the range
-
-===== 09_weather | problem=False
-Skip to main content
-keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
-
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
-
-Navigate
-
-🏠 Home & Story
-
-⚔️ Ensemble Arena (Churn)
-
-🎯 Churn Predictor & Retention Optimizer
-
-🚗 ikman Deal Checker (RF + ANN)
-
-🌦️ Colombo Weather (ARIMA + RF)
-
-ℹ️ Research & About
-
-B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
-
-🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
-
-🌦️ Colombo Weather — Hybrid ARIMA + Random Forest
-
-Data source: REAL · Open-Meteo archive (ERA5), Colombo — downloaded live · 2015-01-01 → 2026-11-16
-
-Forecast for 2026-11-17
-
-26.8 °C
-
-+0.05 °C RF correction
-
-ARIMA alone
-
-26.7 °C
-
-Hybrid test RMSE
-
-0.594 °C
-
-ARIMA test RMSE
-
-0.616 °C
-
-Show last N test days
-
-120
-
-30
-
-365
-
-Series
-
-Actual
-ARIMA + Fourier
-Hybrid ARIMA + RF
-
-How the hybrid works
-
-ARIMA(2, 0, 1) + yearly Fourier terms → linear, autocorrelated part (trend + season).
-Random Forest learns ARIMA's residuals from lagged rain, wind, solar radiation and monsoon flags.
-Forecast = ARIMA + RF correction. All inputs use data up to yesterday only.
-keyboard_arrow_right
-
-Monthly climate of Colombo (from the data)
-
-===== 10_weather_detail | problem=False
-Skip to main content
-keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
-
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
-
-Navigate
-
-🏠 Home & Story
-
-⚔️ Ensemble Arena (Churn)
-
-🎯 Churn Predictor & Retention Optimizer
-
-🚗 ikman Deal Checker (RF + ANN)
-
-🌦️ Colombo Weather (ARIMA + RF)
-
-ℹ️ Research & About
-
-B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
-
-🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
-
-🌦️ Colombo Weather — Hybrid ARIMA + Random Forest
-
-Data source: REAL · Open-Meteo archive (ERA5), Colombo — downloaded live · 2015-01-01 → 2026-11-16
-
-Forecast for 2026-11-17
-
-26.8 °C
-
-+0.05 °C RF correction
-
-ARIMA alone
-
-26.7 °C
-
-Hybrid test RMSE
-
-0.594 °C
-
-ARIMA test RMSE
-
-0.616 °C
-
-Show last N test days
-
-120
-
-30
-
-365
-
-Series
-
-Actual
-ARIMA + Fourier
-Hybrid ARIMA + RF
-
-How the hybrid works
-
-ARIMA(2, 0, 1) + yearly Fourier terms → linear, autocorrelated part (trend + season).
-Random Forest learns ARIMA's residuals from lagged rain, wind, solar radiation and monsoon flags.
-Forecast = ARIMA + RF correction. All inputs use data up to yesterday only.
-keyboard_arrow_right
-
-Monthly climate of Colombo (from the data)
-
-===== 11_about | problem=False
-Skip to main content
-keyboard_double_arrow_left
-🇱🇰 LankaEnsemble Lab
-
-Bagging · Boosting · Stacking · Hybrids — on Sri Lankan data
-
-Navigate
-
-🏠 Home & Story
-
-⚔️ Ensemble Arena (Churn)
-
-🎯 Churn Predictor & Retention Optimizer
-
-🚗 ikman Deal Checker (RF + ANN)
-
-🌦️ Colombo Weather (ARIMA + RF)
-
-ℹ️ Research & About
-
-B.N.V. Gunathilaka · 224059P Faculty of IT, University of Moratuwa
-
-🤖 UI & parts of code generated with Claude (Anthropic); reviewed by the student.
-
-ℹ️ Research notes & About
 Random Forest vs gradient boosting
 	Random Forest	XGBoost	LightGBM	CatBoost
 Trees built	independent, deep, bootstrap	sequential, depth-wise, regularised	sequential, leaf-wise, histograms	sequential, symmetric trees, ordered boosting
 Mainly reduces	variance	bias	bias	bias
 Tuning	minimal	moderate	moderate	minimal
-Categoricals	need encoding	need encoding	native	native (best)
 Over-fit risk	low	medium	medium–high on small data	low
+
+Time series: trees cannot extrapolate a trend or unseen temperatures — that is why the ARIMA + RF hybrid lets ARIMA handle trend and season.
+
 Tabular vs image / text data
 Tabular: tree ensembles remain state-of-the-art for medium tabular data — mixed types, thresholds, interactions, little preprocessing.
-Images / text: signal lives in spatial/sequential structure → CNNs / Transformers dominate; ensembles are used on top of their embeddings or to average several networks.
-Data honesty
+Images / text: signal lives in spatial/sequential structure → CNNs / Transformers dominate; ensembles are used on their embeddings or to average networks.
+Data
 
-Colombo weather is real (Open-Meteo / ERA5). Telecom churn and vehicle listings are synthetic, Sri Lankan-context datasets generated by the student (data/generate_datasets.py).
+One real dataset: Colombo daily weather 2015–2026 from the Open-Meteo historical archive (ERA5 reanalysis), saved in data/colombo_weather_daily_used.csv.
 
 Generative AI declaration
 
