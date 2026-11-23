@@ -67,8 +67,8 @@ with sync_playwright() as p:
 
         def drag(i, frac):                 # drag slider i's thumb to a fraction of the slider's width
             sl = pg.locator('[data-testid="stSlider"]').nth(i)
-            th = sl.locator('[role="slider"]').bounding_box()
-            tr = sl.bounding_box()
+            th = sl.locator('[data-testid="stSliderThumbValue"]').locator("xpath=..").bounding_box()   # the thumb
+            tr = sl.locator('[role="group"]').bounding_box()                                           # the track
             y = th["y"] + th["height"] / 2
             pg.mouse.move(th["x"] + th["width"] / 2, y)
             pg.mouse.down()
@@ -76,8 +76,8 @@ with sync_playwright() as p:
             pg.mouse.up()
             time.sleep(5)
             settle(pg, "Heat alert")
-        drag(0, 0.45)                      # rain about 65 mm
-        drag(1, 0.08)                      # solar radiation about 4 MJ/m² (very cloudy)
+        drag(0, 0.42)                      # rain about 63 mm
+        drag(1, 0.07)                      # solar radiation about 4 MJ/m² (very cloudy)
         settle(pg, "from your what-if", timeout=120_000)
         shot(pg, "08b_tomorrow_whatif")
     except Exception as e:
