@@ -1,0 +1,43 @@
+name: Generate data and execute notebook
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "notebook_src.py"
+      - "build_notebook.py"
+      - "data/generate_datasets.py"
+      - ".github/workflows/run-notebook.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: execute-notebook
+  cancel-in-progress: true
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install packages
+        run: pip install -q jupyter nbconvert ipykernel xgboost lightgbm catboost statsmodels scikit-learn pandas numpy matplotlib seaborn scipy requests jinja2
+      - name: Generate Sri Lankan-context datasets
+        run: python data/generate_datasets.py
+      - name: Build the notebook
+        run: python build_notebook.py
+      - name: Execute the notebook (real XGBoost, LightGBM, CatBoost, statsmodels and Colombo weather)
+        run: jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=3600 --ExecutePreprocessor.kernel_name=python3 LankaEnsemble_Lab.ipynb
+      - name: Commit the executed notebook and data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add LankaEnsemble_Lab.ipynb results_summary.json data/
+          git commit -m "Executed notebook with outputs + generated data [skip ci]" || echo "Nothing to commit"
+          git push
