@@ -6,6 +6,7 @@ Run locally:  pip install -r requirements.txt  &&  streamlit run app.py
 AI declaration: the dashboard UI and parts of this code were generated with the help of Claude (Anthropic)
 and reviewed/tested by the student.
 """
+import json
 import time
 from pathlib import Path
 
@@ -70,6 +71,15 @@ def load_history():
     """The fixed dataset used in the notebook: 1 Jan 2015 – 31 Oct 2026."""
     d = pd.read_csv(CSV) if CSV.exists() else download("2015-01-01", "2026-10-31")
     return tidy(d).loc["2015-01-01":"2026-10-31"]
+
+
+@st.cache_data
+def notebook_results():
+    """Headline numbers written by the executed notebook (results_summary.json), if present."""
+    try:
+        return json.loads((Path(__file__).parent / "results_summary.json").read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=6 * 3600, show_spinner="Downloading the latest Colombo weather from Open-Meteo…")
@@ -393,15 +403,21 @@ elif page == PAGES[2]:
         ax.set_xlabel("number of trees"); ax.set_ylabel("test RMSE °C"); ax.set_title("Error vs ensemble size"); ax.grid(alpha=.3); ax.legend()
         fig.tight_layout(); show_fig(fig)
     with c2:
-        st.markdown("""**What this shows**
+        xg = cur["XGBoost"]
+        more = (f"With more trees it slowly gets worse ({xg.iloc[-1]:.3f} °C at {int(xg.index[-1])}): boosting **over-fits if it runs "
+                "too long**, so it needs early stopping or a tuned number of trees." if xg.idxmin() < xg.index[-1] else
+                "It is still improving at the largest size tried — boosting needs a tuned number of trees.")
+        st.markdown(f"""**What this shows**
 * **Random Forest** reaches its best error quickly and then stays flat — more trees only average more; they never over-fit.
-* **XGBoost** starts far off (few small steps from the average) and improves tree by tree as each one corrects the last — **boosting reduces bias**, and needs a tuned number of trees.""")
+* **XGBoost** starts far off (learning rate 0.03 = small steps), improves tree by tree — **boosting reduces bias** — and is best at
+  **{int(xg.idxmin())} trees** ({xg.min():.3f} °C). {more}""")
     c1, c2 = st.columns([1.2, 1])
     with c1:
         cv = A["cv"]
         fig, ax = plt.subplots(figsize=(7.5, 3.8))
         ax.plot(range(1, len(cv) + 1), cv["Random Forest"], "o-", color="#2a9d8f", label="Random Forest")
         ax.plot(range(1, len(cv) + 1), cv["XGBoost"], "s-", color="#e76f51", label="XGBoost")
+        ax.set_xticks(range(1, len(cv) + 1))
         ax.set_xlabel("time-series CV fold (each tests on the next unseen year)"); ax.set_ylabel("RMSE °C"); ax.grid(alpha=.3); ax.legend()
         fig.tight_layout(); show_fig(fig)
     with c2:
@@ -409,7 +425,12 @@ elif page == PAGES[2]:
         m1.metric("RF mean CV RMSE", f"{cv['Random Forest'].mean():.3f} °C")
         m2.metric("XGB mean CV RMSE", f"{cv['XGBoost'].mean():.3f} °C")
         st.caption("Each fold trains on all earlier years and tests on the following year — no future data leaks into training. "
-                   "The notebook adds a corrected t-test of the difference.")
+                   "This page uses lighter settings (5 folds, 200 trees) so it loads fast.")
+        nb = notebook_results()
+        if nb and "rf_vs_xgb" in nb:
+            r = nb["rf_vs_xgb"]
+            st.info(f"**Notebook (6 folds, full settings):** Random Forest {np.mean(r['RF']):.3f} vs XGBoost {np.mean(r['XGB']):.3f} °C — "
+                    f"corrected t-test p = {r['p']:.2f} → " + ("significant at 5%." if r["p"] < 0.05 else "**not significant** at 5%."))
     st.subheader("What drives tomorrow's temperature? (built-in importance)")
     imp = A["imp"].loc[A["imp"].mean(axis=1).sort_values(ascending=False).index[:12]]
     st.bar_chart(imp)
