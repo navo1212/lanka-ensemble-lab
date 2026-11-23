@@ -27,9 +27,13 @@ def go(pg, label, wait_text):
     settle(pg, wait_text)
 
 
-def shot(pg, name, anchor=None):
+def shot(pg, name, anchor=None, scroll=0):
     if anchor:
         pg.get_by_text(anchor).first.scroll_into_view_if_needed()
+        time.sleep(2)
+    if scroll:
+        pg.mouse.move(1100, 500)
+        pg.mouse.wheel(0, scroll)
         time.sleep(2)
     pg.screenshot(path=str(OUT / f"{name}.png"))
     body = pg.locator("body").inner_text()
@@ -58,7 +62,7 @@ with sync_playwright() as p:
 
     go(pg, "Deal Checker", "Hybrid RF+ANN estimate")
     shot(pg, "07_deal")
-    shot(pg, "08_deal_hist", "Asking vs estimate")
+    shot(pg, "08_deal_hist", scroll=650)
 
     go(pg, "Colombo Weather", "Hybrid test RMSE")
     shot(pg, "09_weather")
