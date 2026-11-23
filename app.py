@@ -505,8 +505,8 @@ elif page == PAGES[5]:
         ax.plot(recent.index, recent.values, "o-", color="black", ms=3, label="observed")
         ax.errorbar([L["nxt"]], [hyb], yerr=[[hyb - lo], [hi - hyb]], fmt="o", color="#e76f51", capsize=6, label="forecast + 80% range")
         ax.set_title("Last 30 days and tomorrow"); ax.grid(alpha=.3); ax.legend(fontsize=8); fig.autofmt_xdate(); fig.tight_layout(); show_fig(fig)
-    st.caption("Try a very rainy, cloudy day (high rain, low radiation): the Random Forest part of the hybrid lowers tomorrow's forecast — "
-               "the non-linear weather effect that ARIMA alone cannot see.")
+    st.caption("Move the sliders: only the Random Forest part of the hybrid sees rain, sunshine and wind, so the change you see is the "
+               "non-linear weather effect that ARIMA alone cannot model.")
 
 else:
     st.title("ℹ️ Research & About")
