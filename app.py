@@ -371,7 +371,7 @@ elif page == PAGES[1]:
     with c2:
         st.markdown("""**What this shows**
 * **RF (bagging)** climbs fast then **plateaus** — more trees only average more; they never over-fit.
-* **XGBoost (boosting)** starts **lower** (few weak trees = high bias) and keeps improving as each tree corrects the last.
+* **XGBoost (boosting)** climbs **faster** (each tree corrects the last), peaks, then can **over-fit** if it keeps adding trees — boosting needs early stopping.
 * Bagging fights **variance**, boosting fights **bias** — visible in one chart.""")
 
     st.subheader("🎚️ Decision threshold explorer")
